@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aguas Misiones · Panel</title>
+<style>
+:root{--p:#0F7B9B;--s:#3FBFBF;--ok:#1F8B4C;--bad:#C0392B;--warn:#B7791F;--bg:#F8FAFB;--card:#fff;--tx:#1B1B1B;--mu:#667;--bd:#DDE5E9;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--p:#4FC3F7;--s:#4DB6AC;--ok:#81C784;--bad:#EF8A80;--warn:#F0C56B;--bg:#10171A;--card:#182125;--tx:#E8EEF0;--mu:#93A3AA;--bd:#2A373C;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+header{background:var(--p);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+@media(prefers-color-scheme:dark){header{color:#0b1316}}
+header .brand{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+header img{width:34px;height:34px;border-radius:8px;background:#fff;object-fit:contain}
+header h1{font-size:17px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button{background:transparent;border:1px solid currentColor;color:inherit}
+nav{display:flex;gap:4px;padding:8px 12px;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--bd)}
+nav button{background:none;border:0;padding:8px 14px;border-radius:8px;color:var(--mu);font-weight:600;white-space:nowrap;cursor:pointer}
+nav button.on{background:var(--p);color:#fff}
+@media(prefers-color-scheme:dark){nav button.on{color:#0b1316}}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
+.kpi small{color:var(--mu);display:block}.kpi b{font-size:22px}
+h2{font-size:17px;margin:0 0 10px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:520px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--bd);vertical-align:middle}th{color:var(--mu);font-size:12px;text-transform:uppercase}
+td.r,th.r{text-align:right}
+button,input,select,textarea{font:inherit}
+button{padding:8px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer}
+button.pri{background:var(--p);border-color:var(--p);color:#fff}
+@media(prefers-color-scheme:dark){button.pri{color:#0b1316}}
+button.dng{color:var(--bad)}button.sm{padding:4px 9px;font-size:13px}
+input,select,textarea{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+label{display:block;font-size:13px;color:var(--mu);margin:8px 0 3px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.tag{padding:2px 8px;border-radius:99px;font-size:12px;font-weight:600;border:1px solid currentColor}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.mu{color:var(--mu)}
+.bar{height:10px;border-radius:5px;background:var(--s);min-width:2px}
+dialog{border:1px solid var(--bd);border-radius:14px;background:var(--card);color:var(--tx);width:min(560px,94vw);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+#login{max-width:340px;margin:12vh auto;padding:0 16px}
+.login-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.login-head img{width:38px;height:38px;border-radius:10px;background:#fff;object-fit:contain}
+.hide{display:none!important}
+.support{position:fixed;right:12px;bottom:12px;font-size:12px;padding:6px 10px;border-radius:999px;text-decoration:none;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+.support.light{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+</style>
+</head>
+<body>
+<div id="login" class="hide"><div class="card">
+<div class="login-head"><img src="logo.png" alt="Aguas Misiones"><div><h2 style="margin:0">Aguas Misiones</h2><div class="mu" style="font-size:13px">Panel de administración</div></div></div>
+<label>Email</label><input id="em" type="email" autocomplete="username">
+<label>Contraseña</label><input id="pw" type="password" autocomplete="current-password">
+<p id="lerr" class="bad hide"></p>
+<div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
+</div></div>
+<div id="app" class="hide">
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<nav id="nav"></nav><main id="view"></main>
+</div>
+<dialog id="dlg"></dialog>
+<a class="support support-light" href="https://wa.me/5493758501182" target="_blank" rel="noopener">Atención técnica</a>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<script>
+const SB_URL='https://hjghvofqstmcnzccgasd.supabase.co';
+const SB_KEY='sb_publishable_87onxbvon9tgWbGWwQbZAg_odZx2slc';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=c=>'$ '+((c||0)/100).toLocaleString('es-AR',{maximumFractionDigits:2});
+const fdt=t=>t?new Date(Number(t)).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}):'—';
+const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',DEBITO:'Débito'};
+const avail=c=>c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
+const declDiff=c=>(c.counted_cents||0)-avail(c);
+let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home';
+const ok=r=>{if(r.error){alert('Error: '+r.error.message);throw r.error}return r.data};
+
+async function load(){
+  const [p,u,c,cs,pl]=await Promise.all([
+    sb.from('products').select('*').order('name'),
+    sb.from('profiles').select('*').order('name'),
+    sb.from('clients').select('*').order('name'),
+    sb.from('cash_sessions').select('*').order('opened_at',{ascending:false}).limit(500),
+    sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30)]);
+  S.products=ok(p);S.users=ok(u);S.clients=ok(c);S.cash_sessions=ok(cs);
+  S.price_log=ok(pl).map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
+}
+
+function showLogin(msg){$('#app').classList.add('hide');$('#login').classList.remove('hide');const e=$('#lerr');e.textContent=msg||'';e.classList.toggle('hide',!msg)}
+async function enter(user){
+  const {data:pr}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
+  if(!pr||!pr.active||pr.role!=='ADMIN'){await sb.auth.signOut();return showLogin('Este panel es solo para administradores.')}
+  ME=pr;$('#me').textContent=pr.name;
+  $('#login').classList.add('hide');$('#app').classList.remove('hide');
+  $('#view').innerHTML='<p class="mu">Cargando…</p>';
+  try{await load();render()}catch(e){}
+}
+$('#go').onclick=async()=>{
+  $('#go').disabled=true;
+  const {data,error}=await sb.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
+  $('#go').disabled=false;
+  if(error)return showLogin('Email o contraseña incorrectos.');
+  $('#pw').value='';enter(data.user);
+};
+$('#pw').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
+$('#out').onclick=async()=>{await sb.auth.signOut();ME=null;showLogin()};
+(async()=>{const {data}=await sb.auth.getSession();data.session?enter(data.session.user):showLogin()})();
+
+const TABS=[['home','Resumen'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta']];
+const bind={};
+function render(){
+  $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?'on':''}" data-t="${k}">${l}</button>`).join('');
+  $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
+  $('#view').innerHTML=({home:vHome,cash:vCash,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
+  bind[tab]&&bind[tab]();
+}
+const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
+const nameOf=id=>(S.users.find(u=>u.id===id)||{}).name||'—';
+async function refresh(){await load();render()}
+
+function vHome(){
+  const cl=closed(),last=cl[0],pend=cl.filter(c=>c.review_status=='PENDIENTE').length;
+  const open=S.cash_sessions.filter(c=>!c.is_closed).length;
+  const m30=cl.filter(c=>c.closed_at>Date.now()-30*864e5).reduce((a,c)=>a+c.total_cents,0);
+  const debt=S.clients.reduce((a,c)=>a+(c.pending_amount||0),0);
+  const mx=Math.max(1,...cl.slice(0,7).map(c=>c.total_cents));
+  return `<div class="grid">
+   <div class="card kpi"><small>Último cierre</small><b>${last?money(last.total_cents):'—'}</b><small>${last?fdt(last.closed_at):''}</small></div>
+   <div class="card kpi"><small>Ventas últimos 30 días</small><b>${money(m30)}</b></div>
+   <div class="card kpi"><small>Cierres sin controlar</small><b class="${pend?'warn':'ok'}">${pend}</b><small>${open} cajas abiertas</small></div>
+   <div class="card kpi"><small>Deuda de clientes</small><b>${money(debt)}</b></div></div>
+  <div class="card"><h2>Últimos cierres</h2>${cl.slice(0,7).map(c=>`<div class="row" style="flex-wrap:nowrap"><span style="width:90px" class="mu">${fdt(c.closed_at).split(',')[0]}</span><div class="bar" style="width:${c.total_cents/mx*100}%"></div><b>${money(c.total_cents)}</b></div>`).join('')||'<p class="mu">Todavía no hay cierres.</p>'}</div>`;
+}
+
+function stTag(c){const s=c.review_status;return `<span class="tag ${s=='CONFORME'?'ok':s=='OBSERVADO'?'bad':'warn'}">${s=='CONFORME'?'Conforme':s=='OBSERVADO'?'Observado':'Pendiente'}</span>`}
+function vCash(){
+  return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Cierres de caja</h2>
+  <select id="fst" style="width:auto"><option value="">Todos</option><option>PENDIENTE</option><option>CONFORME</option><option>OBSERVADO</option></select>
+  <button id="csv">Exportar CSV</button></div>
+  <div class="tw"><table><thead><tr><th>Cierre</th><th>Cerró</th><th class="r">Efectivo</th><th class="r">Transf.</th><th class="r">Débito</th><th class="r">Total</th><th class="r">Dif. caja</th><th>Control</th><th></th></tr></thead><tbody id="cb"></tbody></table></div></div>`;
+}
+function fillCash(){
+  const f=$('#fst').value;
+  $('#cb').innerHTML=closed().filter(c=>!f||c.review_status==f).map(c=>`<tr><td>${fdt(c.closed_at)}</td><td>${esc(c.closed_by||nameOf(c.opened_by))}</td><td class="r">${money(c.total_cash_cents)}</td><td class="r">${money(c.total_transfer_cents)}</td><td class="r">${money(c.total_debit_cents)}</td><td class="r"><b>${money(c.total_cents)}</b></td><td class="r ${declDiff(c)==0?'ok':'bad'}">${declDiff(c)==0?'✔':money(declDiff(c))}</td><td>${stTag(c)}</td><td><button class="sm" data-id="${c.id}">Revisar</button></td></tr>`).join('')||'<tr><td colspan="9" class="mu">Sin resultados</td></tr>';
+  $('#cb').querySelectorAll('button').forEach(b=>b.onclick=()=>openCash(b.dataset.id));
+}
+bind.cash=()=>{fillCash();$('#fst').onchange=fillCash;$('#csv').onclick=csvOut};
+async function openCash(id){
+  const c=S.cash_sessions.find(x=>x.id===id);
+  const ss=ok(await sb.from('sales').select('*').eq('cash_session_id',id).eq('is_voided',false).order('created_at')).slice();
+  const pays=ok(await sb.from('payments').select('*').eq('cash_session_id',id).order('created_at'));
+  const movs=ok(await sb.from('cash_movements').select('*').eq('cash_session_id',id).order('created_at'));
+  const cname=cid=>(S.clients.find(x=>x.id===cid)||{}).name||'—';
+  const cobrado=c.expected_cash_cents||0,d=$('#dlg');
+  const fiado=ss.reduce((a,s)=>a+Math.max(0,s.total_cents-(s.paid_cents||0)),0);
+  const dd=declDiff(c);
+  d.innerHTML=`<h2>Cierre del ${fdt(c.closed_at)} · ${esc(c.closed_by||nameOf(c.opened_by))}</h2>
+  <p class="mu" style="margin-top:0">Apertura ${fdt(c.opened_at)} · ${ss.length} ventas · Total ${money(c.total_cents)}</p>
+  <div class="card">
+  <div class="row" style="justify-content:space-between;margin:0"><span>Total disponible según la app</span><b>${money(avail(c))}</b></div>
+  <div class="row" style="justify-content:space-between;margin:0"><span>Contado por quien cerró</span><b>${money(c.counted_cents)}</b></div>
+  <p class="${dd==0?'ok':'bad'}" style="margin:4px 0 8px;font-weight:600">Diferencia declarada: ${dd==0?'exacta ✔':(dd>0?'sobrante ':'faltante ')+money(Math.abs(dd))}</p>
+  <div class="row" style="justify-content:space-between;margin:0"><span>Egresos de caja</span><b>${money(c.total_expenses_cents)}</b></div>
+  ${fiado?`<p class="warn" style="margin:4px 0 8px;font-size:13px">Fiado generado en esta caja: ${money(fiado)} (no entró dinero).</p>`:''}
+  <hr style="border:0;border-top:1px solid var(--bd);margin:10px 0">
+  <div class="row" style="justify-content:space-between"><span>Efectivo esperado (ventas + cobros − egresos en efectivo)</span><b>${money(cobrado)}</b></div>
+  <label>Efectivo contado por vos en el arqueo ($)</label><input id="cnt" type="number" step="0.01" value="${c.counted_cash_cents!=null?c.counted_cash_cents/100:''}">
+  <p id="dif" style="margin:8px 0 0;font-weight:600"></p></div>
+  <label>Estado</label><select id="rst"><option value="PENDIENTE">Pendiente</option><option value="CONFORME">Conforme</option><option value="OBSERVADO">Observado</option></select>
+  <label>Observaciones</label><textarea id="rnt" rows="2">${esc(c.review_note)}</textarea>
+  <details style="margin-top:10px"><summary>Ver ventas (${ss.length})</summary><div class="tw"><table><tbody>${ss.map(s=>`<tr><td>${fdt(s.created_at)}</td><td>${PAY[s.payment_type]||s.payment_type}${s.is_on_account?' · a cuenta':''}</td><td class="r">${money(s.total_cents)}</td></tr>`).join('')}</tbody></table></div></details>
+  <details style="margin-top:6px"><summary>Cobros de fiado (${pays.length})</summary><div class="tw"><table><tbody>${pays.map(p=>`<tr><td>${fdt(p.created_at)}</td><td>${esc(cname(p.client_id))}</td><td>${PAY[p.method]||p.method}</td><td class="r">${money(p.amount_cents)}</td></tr>`).join('')||'<tr><td class="mu">Sin cobros</td></tr>'}</tbody></table></div></details>
+  <details style="margin-top:6px"><summary>Ingresos y egresos (${movs.length})</summary><div class="tw"><table><tbody>${movs.map(m=>`<tr><td>${fdt(m.created_at)}</td><td>${esc(m.concept)||'—'}</td><td>${PAY[m.method]||m.method}</td><td class="r ${m.type=='EGRESO'?'bad':'ok'}">${m.type=='EGRESO'?'−':'+'}${money(m.amount_cents)}</td></tr>`).join('')||'<tr><td class="mu">Sin movimientos</td></tr>'}</tbody></table></div></details>
+  <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Guardar</button></div>`;
+  $('#rst').value=c.review_status;
+  const calc=()=>{const v=$('#cnt').value;if(v==='')return $('#dif').textContent='';const df=Math.round(parseFloat(v)*100)-cobrado;$('#dif').className=df==0?'ok':'bad';$('#dif').textContent=df==0?'Caja cuadrada ✔':(df>0?'Sobrante ':'Faltante ')+money(Math.abs(df))};
+  $('#cnt').oninput=calc;calc();$('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{const v=$('#cnt').value;
+    const u={counted_cash_cents:v===''?null:Math.round(parseFloat(v)*100),review_status:$('#rst').value,review_note:$('#rnt').value,reviewed_by:ME.id,reviewed_at:Date.now()};
+    ok(await sb.from('cash_sessions').update(u).eq('id',id));d.close();refresh()};
+  d.showModal();
+}
+function csvOut(){
+  const h=['cierre','cerro','efectivo','transferencia','debito','total','egresos','efectivo_esperado','contado_por_cajero','diferencia_cajero','efectivo_contado_admin','estado','observaciones'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=closed().map(c=>[fdt(c.closed_at),c.closed_by,c.total_cash_cents/100,c.total_transfer_cents/100,c.total_debit_cents/100,c.total_cents/100,(c.total_expenses_cents||0)/100,(c.expected_cash_cents||0)/100,(c.counted_cents||0)/100,declDiff(c)/100,c.counted_cash_cents!=null?c.counted_cash_cents/100:'',c.review_status,c.review_note].map(q).join(','));
+  dl('cierres-de-caja.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
+}
+function dl(name,txt,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;a.click()}
+
+function vPrices(){
+  return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Productos y precios</h2><button class="pri" id="np">+ Producto</button></div>
+  <div class="tw"><table><thead><tr><th>Producto</th><th class="r">Precio</th><th>Estado</th><th></th></tr></thead><tbody>${S.products.map(p=>`<tr><td><b>${esc(p.name)}</b><br><span class="mu">${esc(p.description)}</span></td><td class="r">${money(p.price_cents)}</td><td><span class="tag ${p.active?'ok':'mu'}">${p.active?'Activo':'Inactivo'}</span></td><td><button class="sm" data-id="${p.id}">Editar</button></td></tr>`).join('')||'<tr><td colspan="4" class="mu">Todavía no cargaste productos.</td></tr>'}</tbody></table></div>
+  <p class="mu" style="font-size:13px">Los precios nuevos rigen para ventas futuras.</p></div>
+  <div class="card"><h2>Historial de cambios</h2>${S.price_log.slice(0,15).map(l=>`<div class="row mu" style="margin:0 0 4px">${fdt(l.at)} · ${esc(l.name)}: ${money(l.from)} → <b class="${l.to>l.from?'bad':'ok'}">${money(l.to)}</b></div>`).join('')||'<p class="mu">Sin cambios registrados.</p>'}</div>`;
+}
+bind.prices=()=>{$('#np').onclick=()=>editProd();$('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editProd(b.dataset.id))};
+function editProd(id){
+  const p=S.products.find(x=>x.id===id)||{name:'',description:'',price_cents:0,active:true},d=$('#dlg');
+  d.innerHTML=`<h2>${id?'Editar':'Nuevo'} producto</h2><label>Nombre</label><input id="pn" value="${esc(p.name)}"><label>Descripción</label><input id="pd" value="${esc(p.description)}">
+  <label>Precio ($)</label><input id="pp" type="number" step="0.01" min="0" value="${p.price_cents/100}">
+  <label><input type="checkbox" id="pa" style="width:auto" ${p.active?'checked':''}> Activo (visible en la app)</label>
+  <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Guardar</button></div>`;
+  $('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{
+    const name=$('#pn').value.trim(),cents=Math.round(parseFloat($('#pp').value||0)*100);
+    if(!name||!(cents>=0))return alert('Completá nombre y precio válido');
+    const row={name,description:$('#pd').value,price_cents:cents,active:$('#pa').checked};
+    ok(id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert(row));
+    d.close();refresh();
+  };
+  d.showModal();
+}
+
+function vUsers(){
+  return `<div class="card"><h2>Usuarios</h2>
+  <div class="tw"><table><thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b>${u.id===ME.id?' <span class="mu">(vos)</span>':''}</td><td>${u.role=='ADMIN'?'Administrador':'Vendedor'}</td><td><span class="tag ${u.active?'ok':'mu'}">${u.active?'Activo':'Baja'}</span></td><td><button class="sm" data-id="${u.id}">Editar</button></td></tr>`).join('')}</tbody></table></div>
+  <p class="mu" style="font-size:13px">Para crear o restablecer usuarios: Supabase → Authentication → Users.</p></div>`;
+}
+bind.users=()=>{$('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editUser(b.dataset.id))};
+function editUser(id){
+  const u=S.users.find(x=>x.id===id),me=id===ME.id,d=$('#dlg');
+  d.innerHTML=`<h2>Editar usuario</h2><label>Nombre</label><input id="un" value="${esc(u.name)}">
+  <label>Rol</label><select id="ur" ${me?'disabled':''}><option value="VENDEDOR">Vendedor</option><option value="ADMIN">Administrador</option></select>
+  <label><input type="checkbox" id="ua" style="width:auto" ${u.active?'checked':''} ${me?'disabled':''}> Activo</label>
+  ${me?'<p class="mu" style="font-size:13px">No podés cambiar tu propio rol ni darte de baja.</p>':''}
+  <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Guardar</button></div>`;
+  $('#ur').value=u.role;$('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{
+    const name=$('#un').value.trim();if(!name)return alert('Ingresá un nombre');
+    const row=me?{name}:{name,role:$('#ur').value,active:$('#ua').checked};
+    ok(await sb.from('profiles').update(row).eq('id',id));d.close();refresh();
+  };
+  d.showModal();
+}
+
+function vAcct(){
+  return `<div class="card"><h2>Mi contraseña</h2><div class="row"><input id="np1" type="password" placeholder="Nueva contraseña (mín. 8 caracteres)" style="max-width:320px"><button id="spw">Cambiar</button></div></div>
+  <div class="card"><h2>Respaldo</h2><p class="mu" style="margin-top:0">Descargá una copia de productos, usuarios, clientes y cierres.</p><button id="bk">Descargar respaldo</button></div>`;
+}
+bind.acct=()=>{
+  $('#spw').onclick=async()=>{const v=$('#np1').value;if(v.length<8)return alert('Mínimo 8 caracteres');const {error}=await sb.auth.updateUser({password:v});alert(error?'Error: '+error.message:'Contraseña actualizada');$('#np1').value=''};
+  $('#bk').onclick=async()=>{
+    let all=[],from=0;for(;;){const r=ok(await sb.from('sales').select('*').order('created_at').order('id').range(from,from+999));all=all.concat(r);if(r.length<1000)break;from+=1000}
+    dl('respaldo-aguas-misiones-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({...S,sales:all},null,2),'application/json');
+  };
+};
+</script>
+</body>
+</html>
