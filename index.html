@@ -84,7 +84,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.3</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.4</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -101,7 +101,8 @@ const fdt=t=>t?new Date(Number(t)).toLocaleString('es-AR',{dateStyle:'short',tim
 const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',DEBITO:'Débito'};
 const avail=c=>c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:''},CLIF={q:'',f:'all'};
+let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:''},CLIF={q:'',f:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
+let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
 const ok=r=>{if(r.error){alert('Error: '+r.error.message);throw r.error}return r.data};
 
 const isoDay=ms=>{const d=new Date(ms);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -120,11 +121,12 @@ function groupByMonth(list){
   return [...map.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
 }
 
-async function paged(build){
+async function paged(build,onPage){
   const out=[];
   for(let from=0;;from+=1000){
     const r=ok(await build().order('id').range(from,from+999));
     out.push(...r);
+    onPage&&onPage(out.length);
     if(r.length<1000)break;
   }
   return out;
@@ -132,12 +134,15 @@ async function paged(build){
 
 async function load(){
   const [p,u,c,pl,cs]=await Promise.all([
-    sb.from('products').select('*').order('name'),
-    sb.from('profiles').select('*').order('name'),
-    sb.from('clients').select('*').order('name'),
+    paged(()=>sb.from('products').select('*')),
+    paged(()=>sb.from('profiles').select('*')),
+    paged(()=>sb.from('clients').select('*')),
     sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30),
     paged(()=>sb.from('cash_sessions').select('*'))]);
-  S.products=ok(p);S.users=ok(u);S.clients=ok(c);S.cash_sessions=cs;
+  S.products=p.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  S.users=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  S.clients=c;
+  S.cash_sessions=cs;
   S.price_log=ok(pl).map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
 }
 
@@ -148,7 +153,7 @@ async function enter(user){
   ME=pr;$('#me').textContent=pr.name;
   $('#login').classList.add('hide');$('#app').classList.remove('hide');
   $('#view').innerHTML='<p class="mu">Cargando…</p>';
-  A=null;
+  A=null;SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
   try{await load();render()}catch(e){}
 }
 $('#go').onclick=async()=>{
@@ -162,17 +167,16 @@ $('#pw').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
 $('#out').onclick=async()=>{await sb.auth.signOut();ME=null;showLogin()};
 (async()=>{const {data}=await sb.auth.getSession();data.session?enter(data.session.user):showLogin()})();
 
-const TABS=[['home','Resumen'],['clients','Clientes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
+const TABS=[['home','Resumen'],['sales','Ventas'],['clients','Clientes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
 const bind={};
 function render(){
   $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?'on':''}" data-t="${k}">${l}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
-  $('#view').innerHTML=({home:vHome,clients:vClients,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
+  $('#view').innerHTML=({home:vHome,sales:vSales,clients:vClients,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
   bind[tab]&&bind[tab]();
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
 const nameOf=id=>(S.users.find(u=>u.id===id)||{}).name||'—';
-async function refresh(){await load();render()}
 
 function vHome(){
   const cl=closed(),last=cl[0],pend=cl.filter(c=>c.review_status=='PENDIENTE').length;
@@ -260,7 +264,7 @@ function waHref(phone){
 async function openClient(id){
   const c=S.clients.find(x=>x.id===id);if(!c)return;
   const d=$('#dlg');
-  d.innerHTML='<p class="mu">Cargando historial…</p>';d.showModal();
+  d.innerHTML='<p class="mu">Cargando historial…</p>';if(!d.open)d.showModal();
   try{
     const [sales,pays]=await Promise.all([
       paged(()=>sb.from('sales').select('*').eq('client_id',id)),
@@ -309,6 +313,184 @@ async function openClient(id){
       <button id="x">Cerrar</button></div>`;
     $('#x').onclick=()=>d.close();
   }catch(e){d.close()}
+}
+async function loadSales(){
+  if(SALES.loading)return;
+  SALES.loading=true;SALES.error=null;
+  const msg=t=>{const el=$('#smsg');if(el)el.textContent=t};
+  try{
+    msg('Cargando ventas…');
+    const sales=await paged(()=>sb.from('sales').select('*'),n=>msg('Cargando ventas… '+n));
+    msg('Cargando ítems de venta…');
+    const items=await paged(()=>sb.from('sale_items').select('*'),n=>msg('Cargando ítems… '+n));
+    msg('Cargando cobros…');
+    const pays=await paged(()=>sb.from('payments').select('*'),n=>msg('Cargando cobros… '+n));
+    const cli=new Map(S.clients.map(c=>[c.id,c.name]));
+    const usr=new Map(S.users.map(u=>[u.id,u.name]));
+    const prod=new Map(S.products.map(p=>[p.id,p.name]));
+    const itemsBy=new Map();
+    for(const it of items){if(!itemsBy.has(it.sale_id))itemsBy.set(it.sale_id,[]);itemsBy.get(it.sale_id).push(it)}
+    const idx=new Map(sales.map(s=>{
+      const its=itemsBy.get(s.id)||[];
+      const text=[cli.get(s.client_id),s.notes,s.void_reason,...its.map(i=>prod.get(i.product_id))]
+        .filter(Boolean).join(' ').toLowerCase();
+      return [s.id,text];
+    }));
+    SALES={loaded:true,loading:false,error:null,sales,items,pays,itemsBy,idx,cli,usr,prod,loaded_at:Date.now()};
+  }catch(e){
+    SALES.loading=false;
+    SALES.error=(e&&e.message)?e.message:'No se pudieron cargar las ventas';
+  }
+}
+function groupByCreated(list){
+  const map=new Map();
+  for(const s of list){const k=monthKey(s.created_at);if(!map.has(k))map.set(k,[]);map.get(k).push(s)}
+  return [...map.entries()].sort((a,b)=>b[0].localeCompare(a[0]));
+}
+function vSales(){
+  if(!SALES.loaded){
+    return `<div class="card"><h2>Ventas</h2>
+      <p class="mu" id="smsg">${SALES.error?'No se pudieron cargar: '+esc(SALES.error):'Cargando ventas…'}</p>
+      ${SALES.error?'<button id="sretry">Reintentar</button>':''}
+      <p class="mu" style="font-size:12px;margin:0">Se descargan todas las ventas para poder filtrar y sumar. Puede demorar unos segundos.</p></div>`;
+  }
+  const months=[...new Set(SALES.sales.map(s=>monthKey(s.created_at)))].sort().reverse();
+  if(SALF.month!=='all'&&!months.includes(SALF.month))SALF.month='all';
+  const uids=[...new Set(SALES.sales.map(s=>s.created_by).filter(Boolean))]
+    .map(id=>({id,name:SALES.usr.get(id)||'—'})).sort((a,b)=>a.name.localeCompare(b.name));
+  return `<div class="grid" id="skpis"></div>
+  <div class="card"><div class="row"><h2 style="flex:1;margin:0">Ventas</h2>
+   <button class="sm" id="sref">Actualizar</button><button id="scsv">Exportar CSV</button></div>
+   <div class="row">
+    <select id="sm" style="width:auto"><option value="all">Todos los meses</option>${months.map(k=>`<option value="${k}" ${SALF.month===k?'selected':''}>${monthLabel(k)}</option>`).join('')}</select>
+    <select id="su" style="width:auto"><option value="">Todos los vendedores</option>${uids.map(u=>`<option value="${u.id}" ${SALF.user===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+    <select id="spay" style="width:auto"><option value="">Todos los medios</option>${Object.entries(PAY).map(([k,v])=>`<option value="${k}" ${SALF.pay===k?'selected':''}>${v}</option>`).join('')}</select>
+    <input id="sq" placeholder="Cliente, producto o nota" value="${esc(SALF.q)}" style="flex:1;min-width:180px">
+    <label style="margin:0;display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="svd" style="width:auto" ${SALF.voided?'checked':''}> Anuladas</label>
+   </div>
+   <p id="scount" class="mu" style="font-size:13px;margin:0 0 6px"></p>
+   <div id="slist"></div>
+  </div>
+  <div class="card"><h2>Productos más vendidos</h2><div id="stop"></div></div>`;
+}
+bind.sales=()=>{
+  if(!SALES.loaded){
+    if(SALES.error){$('#sretry').onclick=()=>{SALES.error=null;render()}}
+    else if(!SALES.loading){loadSales().then(()=>{if(tab==='sales')render()})}
+    return;
+  }
+  fillSales();
+  $('#sm').onchange=e=>{SALF.month=e.target.value;fillSales()};
+  $('#su').onchange=e=>{SALF.user=e.target.value;fillSales()};
+  $('#spay').onchange=e=>{SALF.pay=e.target.value;fillSales()};
+  $('#sq').oninput=e=>{SALF.q=e.target.value;fillSales()};
+  $('#svd').onchange=e=>{SALF.voided=e.target.checked;fillSales()};
+  $('#sref').onclick=()=>{SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};render()};
+  $('#scsv').onclick=salesCsv;
+};
+function salesFiltered(){
+  const q=SALF.q.trim().toLowerCase();
+  return SALES.sales.filter(s=>{
+    if(SALF.month!=='all'&&monthKey(s.created_at)!==SALF.month)return false;
+    if(SALF.user&&s.created_by!==SALF.user)return false;
+    if(SALF.pay&&s.payment_type!==SALF.pay)return false;
+    if(!SALF.voided&&s.is_voided)return false;
+    if(q&&!(SALES.idx.get(s.id)||'').includes(q))return false;
+    return true;
+  }).sort((a,b)=>b.created_at-a.created_at);
+}
+function paymentsFiltered(){
+  const q=SALF.q.trim().toLowerCase();
+  const clients=q?new Set(salesFiltered().map(s=>s.client_id)):null;
+  return SALES.pays.filter(p=>{
+    if(SALF.month!=='all'&&monthKey(p.created_at)!==SALF.month)return false;
+    if(SALF.user&&p.created_by!==SALF.user)return false;
+    if(SALF.pay&&p.method!==SALF.pay)return false;
+    if(q&&!clients.has(p.client_id)&&!(SALES.cli.get(p.client_id)||'').toLowerCase().includes(q))return false;
+    return true;
+  });
+}
+function fillSales(){
+  const list=salesFiltered(),shown=list.slice(0,300);
+  const valid=list.filter(s=>!s.is_voided);
+  const vendido=valid.reduce((a,s)=>a+s.total_cents,0);
+  const fiado=valid.reduce((a,s)=>a+(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0),0);
+  const cobrado=paymentsFiltered().reduce((a,p)=>a+p.amount_cents,0);
+  const avg=valid.length?Math.round(vendido/valid.length):0;
+  $('#skpis').innerHTML=`
+   <div class="card kpi"><small>Vendido</small><b>${money(vendido)}</b><small>${valid.length} ${valid.length==1?'venta':'ventas'}${SALF.voided?'':' · sin anuladas'}</small></div>
+   <div class="card kpi"><small>Fiado generado</small><b>${money(fiado)}</b></div>
+   <div class="card kpi"><small>Cobrado</small><b>${money(cobrado)}</b></div>
+   <div class="card kpi"><small>Ticket promedio</small><b>${money(avg)}</b></div>`;
+  $('#scount').textContent=list.length?`${list.length} ${list.length==1?'venta':'ventas'}${list.length>shown.length?` · mostrando las últimas ${shown.length}`:''}`:'';
+  const groups=groupByCreated(shown);
+  $('#slist').innerHTML=groups.map(([k,vs],i)=>{
+    const tot=vs.filter(s=>!s.is_voided).reduce((a,s)=>a+s.total_cents,0);
+    const fdo=vs.filter(s=>!s.is_voided).reduce((a,s)=>a+(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0),0);
+    return `<details class="mg" ${i===0?'open':''}>
+     <summary><span><b>${monthLabel(k)}</b> <span class="mu">· ${vs.length} ${vs.length==1?'venta':'ventas'} · ${money(tot)}</span></span>${fdo?`<span class="tag warn">Fiado ${money(fdo)}</span>`:''}</summary>
+     <div class="tw"><table><thead><tr><th>Fecha</th><th>Cliente</th><th class="hide-sm">Vendedor</th><th class="hide-sm">Medio</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>
+     ${vs.map(s=>{
+       const state=s.is_voided?'<span class="tag bad">Anulada</span>':(s.is_on_account&&s.total_cents-(s.paid_cents||0)>0?'<span class="tag warn">Fiado</span>':'<span class="tag ok">Pagada</span>');
+       return `<tr><td>${fdt(s.created_at)}</td><td>${esc(SALES.cli.get(s.client_id)||'Consumidor final')}</td><td class="hide-sm">${esc(SALES.usr.get(s.created_by)||'—')}</td><td class="hide-sm">${PAY[s.payment_type]||s.payment_type}</td><td class="r"><b>${money(s.total_cents)}</b></td><td>${state}</td><td><button class="sm" data-sid="${s.id}">Ver</button></td></tr>`;
+     }).join('')}
+     </tbody></table></div></details>`;
+  }).join('')||'<p class="mu">Sin ventas para los filtros elegidos.</p>';
+  $('#slist').querySelectorAll('button[data-sid]').forEach(b=>b.onclick=()=>openSale(b.dataset.sid));
+  renderRanking(list);
+}
+function renderRanking(list){
+  const ids=new Set(list.filter(s=>!s.is_voided).map(s=>s.id));
+  const agg=new Map();
+  for(const it of SALES.items){
+    if(!ids.has(it.sale_id))continue;
+    const cur=agg.get(it.product_id)||{qty:0,revenue:0};
+    cur.qty+=it.quantity||0;cur.revenue+=it.subtotal_cents||0;
+    agg.set(it.product_id,cur);
+  }
+  const top=[...agg.entries()]
+    .map(([id,v])=>({name:SALES.prod.get(id)||'Producto eliminado',...v}))
+    .sort((a,b)=>b.revenue-a.revenue).slice(0,10);
+  $('#stop').innerHTML=top.length
+    ? `<div class="tw"><table><thead><tr><th>Producto</th><th class="r">Unidades</th><th class="r">Total</th></tr></thead><tbody>${top.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td class="r">${p.qty}</td><td class="r">${money(p.revenue)}</td></tr>`).join('')}</tbody></table></div>`
+    : '<p class="mu">Sin ítems para los filtros elegidos.</p>';
+}
+function salesCsv(){
+  const list=salesFiltered();
+  if(!list.length)return alert('No hay ventas para los filtros elegidos.');
+  const h=['fecha','cliente','vendedor','medio','total','pagado','fiado','anulada','motivo_anulacion','notas'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=list.map(s=>[fdt(s.created_at),SALES.cli.get(s.client_id)||'Consumidor final',SALES.usr.get(s.created_by)||'',PAY[s.payment_type]||s.payment_type,s.total_cents/100,(s.paid_cents||0)/100,(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0)/100,s.is_voided?'SI':'NO',s.void_reason,s.notes].map(q).join(','));
+  dl('ventas-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
+}
+function openSale(id){
+  const s=SALES.sales.find(x=>x.id===id);if(!s)return;
+  const items=SALES.itemsBy.get(id)||[];
+  const client=SALES.cli.get(s.client_id);
+  const seller=SALES.usr.get(s.created_by)||'—';
+  const saldo=s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0;
+  const d=$('#dlg');
+  d.innerHTML=`<h2>Venta del ${fdt(s.created_at)}</h2>
+   <div class="row" style="margin:0 0 10px">${s.is_voided?'<span class="tag bad">Anulada</span>':(s.is_on_account&&saldo>0?'<span class="tag warn">Fiado</span>':'<span class="tag ok">Pagada</span>')}<span class="tag mu">${PAY[s.payment_type]||s.payment_type}</span></div>
+   <div class="card">
+    <div class="row" style="justify-content:space-between;margin:0"><span>Cliente</span><b>${esc(client||'Consumidor final')}</b></div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>Vendedor</span><b>${esc(seller)}</b></div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>Total</span><b>${money(s.total_cents)}</b></div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>Pagado</span><b>${money(s.paid_cents)}</b></div>
+    ${s.is_on_account?`<div class="row" style="justify-content:space-between;margin:0"><span>Saldo fiado</span><b class="${saldo?'warn':'ok'}">${money(saldo)}</b></div>`:''}
+    ${s.is_voided&&s.void_reason?`<p class="bad" style="margin:6px 0 0">Motivo de anulación: ${esc(s.void_reason)}</p>`:''}
+    ${s.notes?`<p class="mu" style="margin:6px 0 0">Nota: ${esc(s.notes)}</p>`:''}
+   </div>
+   <details open style="margin-top:6px"><summary>Productos (${items.length})</summary>
+    <div class="tw"><table><thead><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th></tr></thead><tbody>
+    ${items.map(i=>`<tr><td>${esc(SALES.prod.get(i.product_id)||'Producto eliminado')}</td><td class="r">${i.quantity}</td><td class="r">${money(i.unit_price_cents)}</td><td class="r">${money(i.subtotal_cents)}</td></tr>`).join('')||'<tr><td colspan="4" class="mu">Sin ítems.</td></tr>'}
+    </tbody></table></div></details>
+   <div class="row" style="margin-top:14px;justify-content:flex-end">
+    ${s.client_id&&client?`<button id="scli">Ver cliente</button>`:''}
+    <button id="x">Cerrar</button></div>`;
+  $('#x').onclick=()=>d.close();
+  if(s.client_id&&client)$('#scli').onclick=()=>openClient(s.client_id);
+  if(!d.open)d.showModal();
 }
 function vCash(){
   const uids=[...new Set(closed().map(c=>c.opened_by).filter(Boolean))]
@@ -518,8 +700,14 @@ function editProd(id){
     const name=$('#pn').value.trim(),cents=Math.round(parseFloat($('#pp').value||0)*100);
     if(!name||!(cents>=0))return alert('Completá nombre y precio válido');
     const row={name,description:$('#pd').value,price_cents:cents,active:$('#pa').checked};
-    ok(id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert(row));
-    d.close();refresh();
+    const saved=ok(id
+      ? await sb.from('products').update(row).eq('id',id).select().single()
+      : await sb.from('products').insert(row).select().single());
+    if(id)Object.assign(p,saved);else S.products.push(saved);
+    S.products.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+    const pl=ok(await sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30));
+    S.price_log=pl.map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
+    d.close();render();
   };
   d.showModal();
 }
@@ -541,7 +729,10 @@ function editUser(id){
   $('#sv').onclick=async()=>{
     const name=$('#un').value.trim();if(!name)return alert('Ingresá un nombre');
     const row=me?{name}:{name,role:$('#ur').value,active:$('#ua').checked};
-    ok(await sb.from('profiles').update(row).eq('id',id));d.close();refresh();
+    const saved=ok(await sb.from('profiles').update(row).eq('id',id).select().single());
+    Object.assign(u,saved);
+    if(me)$('#me').textContent=saved.name;
+    d.close();render();
   };
   d.showModal();
 }

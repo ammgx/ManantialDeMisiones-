@@ -7,12 +7,27 @@ https://ammgx.github.io/ManantialDeMisiones-/
 ## Qué incluye
 
 - **Resumen:** último cierre, ventas registradas, cajas sin controlar y deuda de clientes.
+- **Ventas:** todas las ventas con filtros por mes, vendedor, medio y texto; totales, fiado, cobros, detalle y ranking de productos.
 - **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
 - **Precios:** productos, precios e historial de cambios.
 - **Usuarios:** nombre, rol y estado (alta de usuarios desde Supabase).
 - **Cuenta:** cambio de contraseña y respaldo general.
 - **Archivo:** descarga mensual de cajas y consulta de archivos guardados.
+
+## Ventas
+
+- La primera vez que entrás a la pestaña se descargan todas las ventas, ítems y cobros.
+  Puede demorar unos segundos; después queda en memoria y el botón **Actualizar** lo recarga.
+- Totales del filtro: **vendido**, **fiado generado**, **cobrado** y **ticket promedio**.
+- Filtros: mes, vendedor, medio de pago y búsqueda por cliente, producto o nota.
+  Las ventas anuladas se ocultan por defecto; hay un tilde para incluirlas.
+- Tabla agrupada por mes; **Ver** abre el detalle con productos, pago, saldo y motivo de anulación.
+- **Productos más vendidos** se calcula con las ventas filtradas.
+- **Exportar CSV** descarga la lista filtrada completa.
+
+> Si hay muchas ventas, la tabla muestra las últimas 300 para no trabar el celular.
+> Los totales y el CSV usan todas las ventas del filtro.
 
 ## Clientes
 
@@ -69,5 +84,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.3`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.4`) para confirmar qué
 versión está publicada.
