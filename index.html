@@ -73,6 +73,46 @@ details.mg table{min-width:660px}
  details.mg table{min-width:520px}
  .support{right:8px;bottom:8px;font-size:11px;padding:5px 9px}
 }
+/* --- Resumen operativo: pendientes y tarjetas de cajas --- */
+.pend{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.pend button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;padding:10px 12px;background:var(--card);border:1px solid var(--bd);border-radius:10px}
+.pend button b{font-size:19px;line-height:1.15}
+.pend button small{color:var(--mu);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.02em}
+.pend button.warn{border-color:var(--warn)}
+.pend button.bad{border-color:var(--bad)}
+.sechead{display:flex;align-items:center;gap:8px;margin:18px 0 8px;flex-wrap:wrap}
+.sechead h2{margin:0;font-size:17px}
+.sechead .count{padding:1px 8px;border-radius:99px;background:var(--bg);border:1px solid var(--bd);font-size:12px;color:var(--mu);font-weight:600}
+.sechead .sp{flex:1}
+.caja{background:var(--card);border:1px solid var(--bd);border-left:5px solid var(--mu);border-radius:12px;padding:12px;margin-bottom:10px}
+.caja.abierta{border-left-color:var(--ok);background:rgba(31,139,76,.05)}
+.caja.pendiente{border-left-color:var(--warn)}
+.caja.conforme{border-left-color:var(--ok)}
+.caja.observada{border-left-color:var(--bad)}
+@media(prefers-color-scheme:dark){.caja.abierta{background:rgba(129,199,132,.07)}}
+.caja-h{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;cursor:pointer}
+.caja-h .who{min-width:0;flex:1}
+.caja-h .who b{font-size:15px}
+.caja-h .who .mu{display:block;font-size:12px}
+.caja-h .amount{text-align:right;white-space:nowrap}
+.caja-h .amount b{font-size:18px;display:block}
+.caja-h .amount small{color:var(--mu);font-size:11px}
+.caja-h .caret{color:var(--mu);font-size:12px;width:100%}
+.mini{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.mini>div{background:var(--bg);border-radius:8px;padding:8px}
+.mini small{display:block;color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.02em}
+.mini b{font-size:15px}
+.caja-detail{margin-top:10px;border-top:1px solid var(--bd);padding-top:10px}
+.empty-note{font-size:13px;color:var(--mu);margin:2px 0 10px}
+.empty-note a{color:var(--p);font-weight:600;text-decoration:none}
+@media(max-width:640px){
+ .pend{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .pend button b{font-size:17px}
+ .mini{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .caja{padding:11px}
+ .caja-h .amount b{font-size:16px}
+ .sechead{margin:14px 0 7px}
+}
 </style>
 </head>
 <body>
@@ -84,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.6</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.7</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -101,8 +141,12 @@ const fdt=t=>t?new Date(Number(t)).toLocaleString('es-AR',{dateStyle:'short',tim
 const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',DEBITO:'Débito'};
 const avail=c=>c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:''},CLIF={q:'',f:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
+let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
 let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
+let HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
+let CASH_DATA=new Map();   // id de caja -> {ss,pays,movs} ya cargado
+let OPENED=new Set();      // tarjetas desplegadas en el Resumen
+let SHOW_EMPTY=false;      // mostrar cajas abiertas sin actividad
 const ok=r=>{if(r.error){alert('Error: '+r.error.message);throw r.error}return r.data};
 
 const isoDay=ms=>{const d=new Date(ms);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -154,6 +198,8 @@ async function enter(user){
   $('#login').classList.add('hide');$('#app').classList.remove('hide');
   $('#view').innerHTML='<p class="mu">Cargando…</p>';
   A=null;SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
+  HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
+  CASH_DATA=new Map();OPENED=new Set();SHOW_EMPTY=false;
   try{await load();render()}catch(e){}
 }
 $('#go').onclick=async()=>{
@@ -174,24 +220,176 @@ function render(){
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
   $('#view').innerHTML=({home:vHome,sales:vSales,clients:vClients,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
   bind[tab]&&bind[tab]();
+  if(tab==='home'&&!HOME.ready&&!HOME.loading)loadHome();
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
 const byProdOrder=(a,b)=>(Number(a.sort_order??0)-Number(b.sort_order??0))||String(a.name||'').localeCompare(String(b.name||''),'es');
 const nameOf=id=>(S.users.find(u=>u.id===id)||{}).name||'—';
 
 function vHome(){
-  const cl=closed(),last=cl[0],pend=cl.filter(c=>c.review_status=='PENDIENTE').length;
-  const open=S.cash_sessions.filter(c=>!c.is_closed).length;
-  const m30=cl.reduce((a,c)=>a+c.total_cents,0);
-  const debt=S.clients.reduce((a,c)=>a+(c.pending_amount||0),0);
-  const mx=Math.max(1,...cl.slice(0,7).map(c=>c.total_cents));
-  return `<div class="grid">
-   <div class="card kpi"><small>Último cierre</small><b>${last?money(last.total_cents):'—'}</b><small>${last?fdt(last.closed_at):''}</small></div>
-   <div class="card kpi"><small>Ventas registradas</small><b>${money(m30)}</b></div>
-   <div class="card kpi"><small>Cierres sin controlar</small><b class="${pend?'warn':'ok'}">${pend}</b><small>${open} cajas abiertas</small></div>
-   <div class="card kpi"><small>Deuda de clientes</small><b>${money(debt)}</b></div></div>
-  <div class="card"><h2>Últimos cierres</h2>${cl.slice(0,7).map(c=>`<div class="row" style="flex-wrap:nowrap"><span style="width:90px" class="mu">${fdt(c.closed_at).split(',')[0]}</span><div class="bar" style="width:${c.total_cents/mx*100}%"></div><b>${money(c.total_cents)}</b></div>`).join('')||'<p class="mu">Todavía no hay cierres.</p>'}</div>`;
+  const op=S.cash_sessions.filter(c=>!c.is_closed).sort((a,b)=>a.opened_at-b.opened_at);
+  const cl=closed();
+  const pend=cl.filter(c=>c.review_status==='PENDIENTE');
+  const diffs=cl.filter(c=>declDiff(c)!==0);
+  const debt=S.clients.reduce((a,c)=>a+Math.max(0,c.pending_amount||0),0);
+  const withDebt=S.clients.filter(c=>c.pending_amount>0).length;
+  const old=op.filter(c=>Date.now()-c.opened_at>24*3600*1000).length;
+  const opData=op.map(c=>({c,d:dataFor(c)}));
+  const known=opData.filter(x=>x.d).map(x=>({c:x.c,st:statsOf(x.c,x.d)}));
+  const active=known.filter(x=>!x.st.empty);
+  const empty=known.filter(x=>x.st.empty);
+  const unknown=opData.filter(x=>!x.d);
+  const recent=[...new Map([...pend,...cl.slice(0,5)].map(c=>[c.id,c])).values()].sort((a,b)=>b.closed_at-a.closed_at);
+  const openCards=[...active,...unknown].map(({c,st})=>cajaCard(c,st,true)).join('');
+  return `<div class="card"><div class="row" style="margin:0 0 10px"><h2 style="flex:1;margin:0">Pendientes</h2><button class="sm" id="href">Actualizar</button></div>
+   <div class="pend">
+    <button class="${old?'warn':''}" id="popen"><small>Cajas abiertas</small><b>${op.length}</b><small>${old?old+' hace +24 h':'al día'}</small></button>
+    <button class="${pend.length?'warn':''}" id="ppend"><small>Sin controlar</small><b>${pend.length}</b><small>cierres cerrados</small></button>
+    <button class="${diffs.length?'bad':''}" id="pdiff"><small>Con diferencia</small><b>${diffs.length}</b><small>arqueos</small></button>
+    <button id="pdebt"><small>Deuda clientes</small><b>${money(debt)}</b><small>${withDebt} cliente${withDebt===1?'':'s'}</small></button>
+   </div></div>
+   <div class="sechead" id="sec-open"><h2>Cajas abiertas</h2><span class="count">${op.length}</span><span class="sp"></span></div>
+   <p class="empty-note">Tocá una tarjeta para ver el informe completo. Las cajas se cierran desde la app del vendedor.</p>
+   ${HOME.error?`<div class="card"><p class="bad" style="margin:0">No se pudieron cargar los totales: ${esc(HOME.error)}</p><button class="sm" id="hretry" style="margin-top:8px">Reintentar</button></div>`:''}
+   ${openCards||'<p class="mu">No hay cajas abiertas.</p>'}
+   ${HOME.loading?`<p class="mu" style="font-size:13px">Cargando totales de las cajas abiertas…</p>`:''}
+   ${empty.length?`<p class="empty-note">${empty.length} caja${empty.length===1?'':'s'} sin actividad (sin ventas, cobros ni movimientos) · <a href="#" id="tempty">${SHOW_EMPTY?'ocultar':'mostrar'}</a></p>${SHOW_EMPTY?empty.map(({c,st})=>cajaCard(c,st,true)).join(''):''}`:''}
+   <div class="sechead"><h2>Cajas cerradas</h2><span class="count">${recent.length}${cl.length>recent.length?' de '+cl.length:''}</span><span class="sp"></span><button class="sm" id="gall">Ver todas</button></div>
+   <p class="empty-note">Primero las pendientes de control y los últimos cierres. El historial completo, con filtros y exportación, está en <b>Cierres de caja</b>.</p>
+   ${recent.map(c=>cajaCard(c,null,false)).join('')||'<p class="mu">Todavía no hay cajas cerradas.</p>'}`;
 }
+
+function since(ms){
+  const m=Math.max(0,Math.floor((Date.now()-ms)/60000));
+  if(m<60)return 'hace '+m+' min';
+  const h=Math.floor(m/60);if(h<24)return 'hace '+h+' h';
+  const d=Math.floor(h/24);return 'hace '+d+' d';
+}
+function dataFor(c){return CASH_DATA.get(c.id)||HOME.by.get(c.id)||null}
+function statsOf(c,d){
+  if(!d)return null;
+  const ss=(d.ss||[]).filter(s=>!s.is_voided),pays=d.pays||[],movs=d.movs||[];
+  const sum=(a,f)=>a.reduce((x,y)=>x+f(y),0);
+  const vendido=sum(ss,s=>s.total_cents||0);
+  const pagado=sum(ss,s=>s.paid_cents||0);
+  const cobrado=sum(pays,p=>p.amount_cents||0);
+  const egresos=sum(movs,m=>m.type=='EGRESO'?(m.amount_cents||0):0);
+  const efectivoVentas=sum(ss.filter(s=>s.payment_type=='EFECTIVO'),s=>s.paid_cents||0);
+  const efectivoCobros=sum(pays.filter(p=>p.method=='EFECTIVO'),p=>p.amount_cents||0);
+  const egresosEfectivo=sum(movs.filter(m=>m.type=='EGRESO'&&m.method=='EFECTIVO'),m=>m.amount_cents||0);
+  const fiado=ss.reduce((a,s)=>a+(s.is_on_account?Math.max(0,(s.total_cents||0)-(s.paid_cents||0)):0),0);
+  return {ventas:ss.length,cobros:pays.length,movs:movs.length,vendido,pagado,cobrado,egresos,
+    efectivo:efectivoVentas+efectivoCobros-egresosEfectivo,
+    disponible:pagado+cobrado-egresos,fiado,
+    empty:!ss.length&&!pays.length&&!movs.length};
+}
+async function loadHome(){
+  if(HOME.loading)return;
+  const ids=S.cash_sessions.filter(c=>!c.is_closed).map(c=>c.id);
+  if(!ids.length){HOME={ready:true,loading:false,error:null,at:Date.now(),by:new Map()};if(tab==='home')render();return}
+  HOME={...HOME,loading:true,error:null};
+  if(tab==='home')render();
+  try{
+    const [ss,pays,movs]=await Promise.all([
+      fetchIn('sales','cash_session_id',ids),
+      fetchIn('payments','cash_session_id',ids),
+      fetchIn('cash_movements','cash_session_id',ids)]);
+    const by=new Map(ids.map(id=>[id,{ss:[],pays:[],movs:[]}]));
+    for(const s of ss)if(!s.is_voided&&by.has(s.cash_session_id))by.get(s.cash_session_id).ss.push(s);
+    for(const p of pays)if(by.has(p.cash_session_id))by.get(p.cash_session_id).pays.push(p);
+    for(const m of movs)if(by.has(m.cash_session_id))by.get(m.cash_session_id).movs.push(m);
+    HOME={ready:true,loading:false,error:null,at:Date.now(),by};
+  }catch(e){
+    HOME={...HOME,ready:true,loading:false,error:(e&&e.message)?e.message:'No se pudieron cargar los totales',at:Date.now()};
+  }
+  if(tab==='home')render();
+}
+async function ensureCashData(id){
+  if(CASH_DATA.has(id))return CASH_DATA.get(id);
+  const [ss,pays,movs]=await Promise.all([
+    sb.from('sales').select('*').eq('cash_session_id',id).eq('is_voided',false).order('created_at'),
+    sb.from('payments').select('*').eq('cash_session_id',id).order('created_at'),
+    sb.from('cash_movements').select('*').eq('cash_session_id',id).order('created_at')]);
+  const d={ss:ok(ss),pays:ok(pays),movs:ok(movs)};
+  CASH_DATA.set(id,d);return d;
+}
+async function toggleCaja(id){
+  if(OPENED.has(id)){OPENED.delete(id);render();return}
+  OPENED.add(id);render();
+  const c=S.cash_sessions.find(x=>x.id===id);
+  if(c&&c.is_closed&&!CASH_DATA.has(id)){
+    try{await ensureCashData(id)}catch(e){}
+    render();
+  }
+}
+function cajaCard(c,st,isOpen){
+  const open=OPENED.has(c.id);
+  const cls=isOpen?'abierta':(c.review_status=='CONFORME'?'conforme':c.review_status=='OBSERVADO'?'observada':'pendiente');
+  const dd=declDiff(c);
+  const who=isOpen?nameOf(c.opened_by):(c.closed_by||nameOf(c.opened_by));
+  const when=isOpen?`Abrió ${fdt(c.opened_at)} · ${since(c.opened_at)}`:`Cerró ${fdt(c.closed_at)}`;
+  const total=isOpen?(st?money(st.disponible):'—'):money(c.total_cents);
+  const mini=isOpen
+    ? `<div class="mini">
+        <div><small>Vendido</small><b>${st?money(st.vendido):'—'}</b></div>
+        <div><small>Cobrado</small><b>${st?money(st.pagado+st.cobrado):'—'}</b></div>
+        <div><small>Egresos</small><b>${st?money(st.egresos):'—'}</b></div>
+        <div><small>Efectivo esperado</small><b>${st?money(st.efectivo):'—'}</b></div>
+      </div>`
+    : `<div class="mini">
+        <div><small>Efectivo esperado</small><b>${money(c.expected_cash_cents)}</b></div>
+        <div><small>Contado por cajero</small><b>${money(c.counted_cents)}</b></div>
+        <div><small>Diferencia</small><b class="${dd==0?'ok':'bad'}">${dd==0?'✔':money(dd)}</b></div>
+        <div><small>Control</small>${stTag(c)}</div>
+      </div>`;
+  return `<div class="caja ${cls}">
+    <div class="caja-h" data-toggle="${c.id}">
+     <div class="who"><b>${esc(who)}</b><span class="mu">${when}</span></div>
+     <div class="amount"><b>${total}</b><small>${isOpen?'disponible':'total'}</small></div>
+     <div class="caret">${open?'▴ Ocultar informe':'▾ Ver informe'}</div>
+    </div>
+    ${mini}
+    ${open?`<div class="caja-detail">${cajaDetailHtml(c,dataFor(c))}</div>`:''}
+  </div>`;
+}
+function cajaDetailHtml(c,d){
+  if(!d)return '<p class="mu">Cargando informe…</p>';
+  const st=statsOf(c,d),ss=d.ss||[],pays=d.pays||[],movs=d.movs||[];
+  const cname=id=>(S.clients.find(x=>x.id===id)||{}).name||'—';
+  return `<div class="mini">
+     <div><small>Ventas</small><b>${st.ventas}</b></div>
+     <div><small>Cobros</small><b>${st.cobros}</b></div>
+     <div><small>Movimientos</small><b>${st.movs}</b></div>
+     <div><small>Fiado generado</small><b>${money(st.fiado)}</b></div>
+   </div>
+   ${c.is_closed?`<div class="row" style="margin:10px 0 0"><span class="mu">Control:</span>${stTag(c)}${c.review_note?`<span class="mu">· ${esc(c.review_note)}</span>`:''}</div>`:''}
+   <details style="margin-top:10px"><summary>Ventas (${st.ventas})</summary><div class="tw"><table><tbody>${ss.map(s=>`<tr><td>${fdt(s.created_at)}</td><td>${PAY[s.payment_type]||s.payment_type}${s.is_on_account?' · a cuenta':''}</td><td class="r">${money(s.total_cents)}</td></tr>`).join('')||'<tr><td class="mu">Sin ventas</td></tr>'}</tbody></table></div></details>
+   <details style="margin-top:6px"><summary>Cobros de fiado (${st.cobros})</summary><div class="tw"><table><tbody>${pays.map(p=>`<tr><td>${fdt(p.created_at)}</td><td>${esc(cname(p.client_id))}</td><td>${PAY[p.method]||p.method}</td><td class="r">${money(p.amount_cents)}</td></tr>`).join('')||'<tr><td class="mu">Sin cobros</td></tr>'}</tbody></table></div></details>
+   <details style="margin-top:6px"><summary>Ingresos y egresos (${st.movs})</summary><div class="tw"><table><tbody>${movs.map(m=>`<tr><td>${fdt(m.created_at)}</td><td>${esc(m.concept)||'—'}</td><td>${PAY[m.method]||m.method}</td><td class="r ${m.type=='EGRESO'?'bad':'ok'}">${m.type=='EGRESO'?'−':'+'}${money(m.amount_cents)}</td></tr>`).join('')||'<tr><td class="mu">Sin movimientos</td></tr>'}</tbody></table></div></details>
+   ${c.is_closed?`<div class="row" style="margin:10px 0 0"><button class="sm" data-review="${c.id}">Revisar caja</button></div>`:`<p class="mu" style="font-size:12px;margin:10px 0 0">Para cerrar esta caja, hacelo desde la app del vendedor.</p>`}`;
+}
+async function refreshHome(){
+  const b=$('#href');if(b){b.disabled=true;b.textContent='Actualizando…'}
+  try{
+    await load();
+    HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
+    CASH_DATA=new Map();OPENED=new Set();render();
+  }catch(e){alert('No se pudo actualizar: '+((e&&e.message)||e))}
+  const x=$('#href');if(x){x.disabled=false;x.textContent='Actualizar'}
+}
+bind.home=()=>{
+  const on=(id,fn)=>{const e=$('#'+id);if(e)e.onclick=fn};
+  on('href',refreshHome);
+  on('hretry',()=>{HOME={...HOME,ready:false,error:null};render()});
+  on('popen',()=>{const e=document.getElementById('sec-open');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})});
+  on('ppend',()=>{CASHF={u:'',st:'PENDIENTE',diff:false};tab='cash';render()});
+  on('pdiff',()=>{CASHF={u:'',st:'',diff:true};tab='cash';render()});
+  on('pdebt',()=>{CLIF={q:'',f:'debt'};tab='clients';render()});
+  on('tempty',e=>{if(e)e.preventDefault();SHOW_EMPTY=!SHOW_EMPTY;render()});
+  on('gall',()=>{CASHF={u:'',st:'',diff:false};tab='cash';render()});
+  $('#view').querySelectorAll('[data-toggle]').forEach(el=>el.onclick=()=>toggleCaja(el.dataset.toggle));
+  $('#view').querySelectorAll('[data-review]').forEach(b=>b.onclick=e=>{e.stopPropagation();openCash(b.dataset.review)});
+};
 
 function stTag(c){const s=c.review_status;return `<span class="tag ${s=='CONFORME'?'ok':s=='OBSERVADO'?'bad':'warn'}">${s=='CONFORME'?'Conforme':s=='OBSERVADO'?'Observado':'Pendiente'}</span>`}
 
@@ -501,13 +699,14 @@ function vCash(){
   <div class="row">
    <select id="fu" style="width:auto;max-width:100%"><option value="">Todos los usuarios</option>${uids.map(u=>`<option value="${u.id}" ${CASHF.u===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
    <select id="fst" style="width:auto"><option value="">Todos los estados</option>${['PENDIENTE','CONFORME','OBSERVADO'].map(s=>`<option ${CASHF.st===s?'selected':''}>${s}</option>`).join('')}</select>
+   ${CASHF.diff?'<button class="sm" id="fclr">Solo con diferencia · quitar</button>':''}
    <span id="ccount" class="mu" style="font-size:13px"></span>
   </div>
   <div id="cg"></div></div>`;
 }
 function cashFiltered(){
   const u=CASHF.u,f=CASHF.st;
-  return closed().filter(c=>(!u||c.opened_by===u)&&(!f||c.review_status===f));
+  return closed().filter(c=>(!u||c.opened_by===u)&&(!f||c.review_status===f)&&(!CASHF.diff||declDiff(c)!==0));
 }
 function fillCash(){
   const list=cashFiltered();
@@ -528,6 +727,7 @@ bind.cash=()=>{
   fillCash();
   $('#fu').onchange=e=>{CASHF.u=e.target.value;fillCash()};
   $('#fst').onchange=e=>{CASHF.st=e.target.value;fillCash()};
+  if($('#fclr'))$('#fclr').onclick=()=>{CASHF.diff=false;render()};
   $('#csv').onclick=csvOut;
 };
 async function openCash(id){

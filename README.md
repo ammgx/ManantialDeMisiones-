@@ -6,7 +6,7 @@ https://ammgx.github.io/ManantialDeMisiones-/
 
 ## Qué incluye
 
-- **Resumen:** último cierre, ventas registradas, cajas sin controlar y deuda de clientes.
+- **Resumen:** centro de trabajo con pendientes, cajas abiertas y cajas cerradas desplegables.
 - **Ventas:** todas las ventas con filtros por mes, vendedor, medio y texto; totales, fiado, cobros, detalle y ranking de productos.
 - **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
@@ -14,6 +14,27 @@ https://ammgx.github.io/ManantialDeMisiones-/
 - **Usuarios:** crear usuarios, cambiar roles, dar de baja y restablecer contraseñas.
 - **Cuenta:** cambio de contraseña y respaldo completo.
 - **Archivo:** descarga mensual de cajas y consulta de archivos guardados.
+
+## Resumen
+
+Es la pantalla de trabajo: entrás y ves qué falta hacer.
+
+- **Pendientes:** cuatro accesos directos con el número real: cajas abiertas
+  (y cuántas llevan más de 24 h), cierres sin controlar, arqueos con diferencia
+  y deuda total de clientes. Cada uno abre la pestaña correspondiente ya filtrada.
+- **Cajas abiertas:** tarjetas verdes ordenadas de la más vieja a la más nueva.
+  Muestran vendedor, tiempo abierto, vendido, cobrado, egresos y efectivo esperado.
+  Al tocar la tarjeta se despliega el informe completo (ventas, cobros y movimientos)
+  sin salir de la página.
+- **Cajas sin actividad:** las cajas abiertas sin ventas, cobros ni movimientos
+  quedan ocultas para no llenar la pantalla. Hay un enlace para mostrarlas.
+- **Cajas cerradas:** primero las pendientes de control y los últimos cierres,
+  con el mismo informe desplegable y el botón **Revisar caja**.
+- El historial completo, los filtros por mes/usuario/estado y la exportación
+  siguen en **Cierres de caja**.
+
+> Los totales de una caja abierta se calculan en el momento con sus ventas,
+> cobros y movimientos, porque la app recién los guarda al cerrar.
 
 ## Ventas
 
@@ -82,6 +103,7 @@ pestaña **Archivo**.
 - Se muestran agrupadas por mes; el mes más reciente aparece abierto.
 - Cada grupo muestra cantidad de cajas, total y pendientes de control.
 - Filtros: **usuario** (quién abrió la caja) y **estado** (pendiente, conforme, observado).
+- Desde el Resumen, el acceso **Con diferencia** muestra solo los arqueos desparejos.
 - **Exportar CSV** descarga exactamente lo que está filtrado en pantalla.
 
 ## Archivo de cajas (para no llenar Supabase)
@@ -119,5 +141,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.6`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.7`) para confirmar qué
 versión está publicada.
