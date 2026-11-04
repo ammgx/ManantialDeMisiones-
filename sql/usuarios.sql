@@ -26,13 +26,13 @@ begin
   if not public.is_admin() then
     raise exception 'Solo un administrador puede crear usuarios';
   end if;
-  if v_email = '' or position('@' in v_email) = 0 then
+  if v_email is null or v_email = '' or position('@' in v_email) = 0 then
     raise exception 'Email inválido';
   end if;
   if length(coalesce(p_password, '')) < 8 then
     raise exception 'La contraseña debe tener al menos 8 caracteres';
   end if;
-  if p_role not in ('ADMIN', 'VENDEDOR') then
+  if p_role is null or p_role not in ('ADMIN', 'VENDEDOR') then
     raise exception 'Rol inválido';
   end if;
   if exists (select 1 from auth.users where lower(email) = v_email) then
