@@ -84,7 +84,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.5</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.6</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -139,7 +139,7 @@ async function load(){
     paged(()=>sb.from('clients').select('*')),
     sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30),
     paged(()=>sb.from('cash_sessions').select('*'))]);
-  S.products=p.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  S.products=p.sort(byProdOrder);
   S.users=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
   S.clients=c;
   S.cash_sessions=cs;
@@ -176,6 +176,7 @@ function render(){
   bind[tab]&&bind[tab]();
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
+const byProdOrder=(a,b)=>(Number(a.sort_order??0)-Number(b.sort_order??0))||String(a.name||'').localeCompare(String(b.name||''),'es');
 const nameOf=id=>(S.users.find(u=>u.id===id)||{}).name||'—';
 
 function vHome(){
@@ -684,11 +685,29 @@ function openArchiveCash(id){
 
 function vPrices(){
   return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Productos y precios</h2><button class="pri" id="np">+ Producto</button></div>
-  <div class="tw"><table><thead><tr><th>Producto</th><th class="r">Precio</th><th>Estado</th><th></th></tr></thead><tbody>${S.products.map(p=>`<tr><td><b>${esc(p.name)}</b><br><span class="mu">${esc(p.description)}</span></td><td class="r">${money(p.price_cents)}</td><td><span class="tag ${p.active?'ok':'mu'}">${p.active?'Activo':'Inactivo'}</span></td><td><button class="sm" data-id="${p.id}">Editar</button></td></tr>`).join('')||'<tr><td colspan="4" class="mu">Todavía no cargaste productos.</td></tr>'}</tbody></table></div>
+  <div class="tw"><table><thead><tr><th>Orden</th><th>Producto</th><th class="r">Precio</th><th>Estado</th><th></th></tr></thead><tbody>${S.products.map((p,i)=>`<tr><td><div class="row" style="margin:0;gap:4px;flex-wrap:nowrap"><button class="sm" data-up="${p.id}" ${i===0?'disabled':''} title="Subir">↑</button><button class="sm" data-down="${p.id}" ${i===S.products.length-1?'disabled':''} title="Bajar">↓</button></div></td><td><b>${esc(p.name)}</b><br><span class="mu">${esc(p.description)}</span></td><td class="r">${money(p.price_cents)}</td><td><span class="tag ${p.active?'ok':'mu'}">${p.active?'Activo':'Inactivo'}</span></td><td><button class="sm" data-id="${p.id}">Editar</button></td></tr>`).join('')||'<tr><td colspan="5" class="mu">Todavía no cargaste productos.</td></tr>'}</tbody></table></div>
+  <p class="mu" style="font-size:13px">Usá ↑ ↓ para cambiar el orden. Las apps lo toman en la próxima sincronización.</p>
   <p class="mu" style="font-size:13px">Los precios nuevos rigen para ventas futuras.</p></div>
   <div class="card"><h2>Historial de cambios</h2>${S.price_log.slice(0,15).map(l=>`<div class="row mu" style="margin:0 0 4px">${fdt(l.at)} · ${esc(l.name)}: ${money(l.from)} → <b class="${l.to>l.from?'bad':'ok'}">${money(l.to)}</b></div>`).join('')||'<p class="mu">Sin cambios registrados.</p>'}</div>`;
 }
-bind.prices=()=>{$('#np').onclick=()=>editProd();$('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editProd(b.dataset.id))};
+bind.prices=()=>{
+  $('#np').onclick=()=>editProd();
+  $('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editProd(b.dataset.id));
+  $('#view').querySelectorAll('button[data-up]').forEach(b=>b.onclick=()=>moveProd(b.dataset.up,-1));
+  $('#view').querySelectorAll('button[data-down]').forEach(b=>b.onclick=()=>moveProd(b.dataset.down,1));
+};
+async function moveProd(id,dir){
+  const arr=[...S.products],i=arr.findIndex(p=>p.id===id),j=i+dir;
+  if(i<0||j<0||j>=arr.length)return;
+  [arr[i],arr[j]]=[arr[j],arr[i]];
+  const changed=[];
+  arr.forEach((p,k)=>{if(Number(p.sort_order??0)!==k){p.sort_order=k;changed.push({id:p.id,sort_order:k})}});
+  S.products=arr;
+  render();
+  const res=await Promise.all(changed.map(c=>sb.from('products').update({sort_order:c.sort_order}).eq('id',c.id)));
+  const bad=res.find(r=>r.error);
+  if(bad){alert('No se pudo guardar el orden: '+bad.error.message);await load();render()}
+}
 function editProd(id){
   const p=S.products.find(x=>x.id===id)||{name:'',description:'',price_cents:0,active:true},d=$('#dlg');
   d.innerHTML=`<h2>${id?'Editar':'Nuevo'} producto</h2><label>Nombre</label><input id="pn" value="${esc(p.name)}"><label>Descripción</label><input id="pd" value="${esc(p.description)}">
@@ -700,11 +719,12 @@ function editProd(id){
     const name=$('#pn').value.trim(),cents=Math.round(parseFloat($('#pp').value||0)*100);
     if(!name||!(cents>=0))return alert('Completá nombre y precio válido');
     const row={name,description:$('#pd').value,price_cents:cents,active:$('#pa').checked};
+    const maxOrder=S.products.reduce((m,x)=>Math.max(m,Number(x.sort_order??0)),-1);
     const saved=ok(id
       ? await sb.from('products').update(row).eq('id',id).select().single()
-      : await sb.from('products').insert(row).select().single());
+      : await sb.from('products').insert({...row,sort_order:maxOrder+1}).select().single());
     if(id)Object.assign(p,saved);else S.products.push(saved);
-    S.products.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+    S.products.sort(byProdOrder);
     const pl=ok(await sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30));
     S.price_log=pl.map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
     d.close();render();

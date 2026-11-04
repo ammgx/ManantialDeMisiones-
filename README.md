@@ -10,7 +10,7 @@ https://ammgx.github.io/ManantialDeMisiones-/
 - **Ventas:** todas las ventas con filtros por mes, vendedor, medio y texto; totales, fiado, cobros, detalle y ranking de productos.
 - **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
-- **Precios:** productos, precios e historial de cambios.
+- **Precios:** productos, precios, orden manual e historial de cambios.
 - **Usuarios:** crear usuarios, cambiar roles, dar de baja y restablecer contraseñas.
 - **Cuenta:** cambio de contraseña y respaldo completo.
 - **Archivo:** descarga mensual de cajas y consulta de archivos guardados.
@@ -40,6 +40,14 @@ https://ammgx.github.io/ManantialDeMisiones-/
 
 > Los datos del cliente se editan desde la app. El panel solo consulta, para no
 > pisar cambios con la sincronización del celular.
+
+## Productos y precios
+
+- **+ Producto**: crea un producto nuevo al final de la lista.
+- **Editar**: cambia nombre, descripción, precio y si está activo.
+- **↑ / ↓**: cambia el orden de los productos. El orden se guarda en Supabase
+  y las apps lo respetan en la próxima sincronización.
+- Los productos inactivos no se muestran en la app, pero conservan su lugar.
 
 ## Usuarios
 
@@ -111,5 +119,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.5`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.6`) para confirmar qué
 versión está publicada.
