@@ -48,7 +48,7 @@ begin
     raw_app_meta_data, raw_user_meta_data
   ) values (
     '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
-    v_email, crypt(p_password, gen_salt('bf')),
+    v_email, crypt(p_password, gen_salt('bf', 10)),
     now(), now(), now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
     jsonb_build_object('name', v_name)
@@ -97,7 +97,7 @@ begin
   end if;
 
   update auth.users
-     set encrypted_password = crypt(p_password, gen_salt('bf')),
+     set encrypted_password = crypt(p_password, gen_salt('bf', 10)),
          email_confirmed_at = coalesce(email_confirmed_at, now()),
          updated_at = now()
    where id = p_user_id;
