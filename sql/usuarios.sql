@@ -45,13 +45,15 @@ begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
-    raw_app_meta_data, raw_user_meta_data
+    raw_app_meta_data, raw_user_meta_data,
+    confirmation_token, recovery_token, email_change_token_new, email_change
   ) values (
     '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
     v_email, crypt(p_password, gen_salt('bf', 10)),
     now(), now(), now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
-    jsonb_build_object('name', v_name)
+    jsonb_build_object('name', v_name),
+    '', '', '', ''
   );
 
   insert into auth.identities (
