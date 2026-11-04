@@ -107,3 +107,6 @@ revoke all on function public.admin_create_user(text, text, text, text) from pub
 revoke all on function public.admin_set_password(uuid, text) from public, anon;
 grant execute on function public.admin_create_user(text, text, text, text) to authenticated;
 grant execute on function public.admin_set_password(uuid, text) to authenticated;
+
+-- Que el panel vea las funciones nuevas sin esperar a que PostgREST se reinicie.
+notify pgrst, 'reload schema';
