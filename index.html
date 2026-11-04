@@ -84,7 +84,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.2</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.3</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -101,7 +101,7 @@ const fdt=t=>t?new Date(Number(t)).toLocaleString('es-AR',{dateStyle:'short',tim
 const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',DEBITO:'Débito'};
 const avail=c=>c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:''};
+let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:''},CLIF={q:'',f:'all'};
 const ok=r=>{if(r.error){alert('Error: '+r.error.message);throw r.error}return r.data};
 
 const isoDay=ms=>{const d=new Date(ms);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -162,12 +162,12 @@ $('#pw').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
 $('#out').onclick=async()=>{await sb.auth.signOut();ME=null;showLogin()};
 (async()=>{const {data}=await sb.auth.getSession();data.session?enter(data.session.user):showLogin()})();
 
-const TABS=[['home','Resumen'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
+const TABS=[['home','Resumen'],['clients','Clientes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
 const bind={};
 function render(){
   $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?'on':''}" data-t="${k}">${l}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
-  $('#view').innerHTML=({home:vHome,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
+  $('#view').innerHTML=({home:vHome,clients:vClients,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
   bind[tab]&&bind[tab]();
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
@@ -189,6 +189,127 @@ function vHome(){
 }
 
 function stTag(c){const s=c.review_status;return `<span class="tag ${s=='CONFORME'?'ok':s=='OBSERVADO'?'bad':'warn'}">${s=='CONFORME'?'Conforme':s=='OBSERVADO'?'Observado':'Pendiente'}</span>`}
+
+function filteredClients(){
+  const q=CLIF.q.trim().toLowerCase();
+  return S.clients.filter(c=>{
+    if(CLIF.f==='debt'&&!(c.pending_amount>0))return false;
+    if(CLIF.f==='active'&&!c.active)return false;
+    if(CLIF.f==='inactive'&&c.active)return false;
+    if(!q)return true;
+    return [c.name,c.phone,c.address,c.localidad,c.reference,c.description]
+      .some(v=>String(v||'').toLowerCase().includes(q));
+  }).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+}
+function vClients(){
+  const debt=S.clients.reduce((a,c)=>a+Math.max(0,c.pending_amount||0),0);
+  const withDebt=S.clients.filter(c=>c.pending_amount>0).length;
+  const inactive=S.clients.filter(c=>!c.active).length;
+  return `<div class="grid">
+   <div class="card kpi"><small>Clientes</small><b>${S.clients.length}</b></div>
+   <div class="card kpi"><small>Con deuda</small><b class="${withDebt?'warn':'ok'}">${withDebt}</b></div>
+   <div class="card kpi"><small>Deuda total</small><b>${money(debt)}</b></div>
+   <div class="card kpi"><small>Inactivos</small><b class="mu">${inactive}</b></div></div>
+  <div class="card"><div class="row"><h2 style="flex:1;margin:0">Clientes</h2>
+   <button id="ccsv">Exportar CSV</button></div>
+   <div class="row">
+    <input id="cq" placeholder="Buscar nombre, teléfono, dirección o zona" value="${esc(CLIF.q)}" style="flex:1;min-width:200px">
+    <select id="cf" style="width:auto">
+     <option value="all" ${CLIF.f==='all'?'selected':''}>Todos</option>
+     <option value="debt" ${CLIF.f==='debt'?'selected':''}>Con deuda</option>
+     <option value="active" ${CLIF.f==='active'?'selected':''}>Activos</option>
+     <option value="inactive" ${CLIF.f==='inactive'?'selected':''}>Inactivos</option>
+    </select>
+   </div>
+   <div id="clist"></div>
+   <p class="mu" style="font-size:12px;margin:6px 0 0">Los datos de contacto y la deuda se editan desde la app; acá se consultan.</p>
+  </div>`;
+}
+function fillClients(){
+  const all=filteredClients(),list=all.slice(0,200);
+  $('#clist').innerHTML=`<p class="mu" style="margin:0 0 6px;font-size:13px">${all.length} ${all.length==1?'cliente':'clientes'}${all.length>list.length?` · mostrando los primeros ${list.length}`:''}</p>
+   <div class="tw"><table><thead><tr><th>Cliente</th><th class="hide-sm">Teléfono</th><th class="r">Deuda</th><th>Estado</th><th></th></tr></thead><tbody>
+   ${list.map(c=>`<tr>
+    <td><b>${esc(c.name)}</b>${c.localidad?`<br><span class="mu">${esc(c.localidad)}</span>`:''}</td>
+    <td class="hide-sm">${esc(c.phone)||'—'}</td>
+    <td class="r ${c.pending_amount>0?'warn':''}"><b>${money(c.pending_amount)}</b></td>
+    <td>${c.active?'<span class="tag ok">Activo</span>':'<span class="tag mu">Baja</span>'}</td>
+    <td><button class="sm" data-cid="${c.id}">Ver</button></td></tr>`).join('')||'<tr><td colspan="5" class="mu">Sin resultados.</td></tr>'}
+   </tbody></table></div>`;
+  $('#clist').querySelectorAll('button[data-cid]').forEach(b=>b.onclick=()=>openClient(b.dataset.cid));
+}
+bind.clients=()=>{
+  fillClients();
+  $('#cq').oninput=e=>{CLIF.q=e.target.value;fillClients()};
+  $('#cf').onchange=e=>{CLIF.f=e.target.value;fillClients()};
+  $('#ccsv').onclick=clientsCsv;
+};
+function clientsCsv(){
+  const list=filteredClients();
+  if(!list.length)return alert('No hay clientes para los filtros elegidos.');
+  const h=['nombre','telefono','direccion','localidad','referencia','descripcion','deuda','activo','dispensador','ajuste_precio'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=list.map(c=>[c.name,c.phone,c.address,c.localidad,c.reference,c.description,(c.pending_amount||0)/100,c.active?'SI':'NO',c.has_dispenser?'SI':'NO',(c.price_diff_cents||0)/100].map(q).join(','));
+  dl('clientes-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
+}
+function waHref(phone){
+  const d=String(phone||'').replace(/\D/g,'');
+  if(!d)return null;
+  return 'https://wa.me/'+(d.startsWith('54')?d:'549'+d.replace(/^0+/,''));
+}
+async function openClient(id){
+  const c=S.clients.find(x=>x.id===id);if(!c)return;
+  const d=$('#dlg');
+  d.innerHTML='<p class="mu">Cargando historial…</p>';d.showModal();
+  try{
+    const [sales,pays]=await Promise.all([
+      paged(()=>sb.from('sales').select('*').eq('client_id',id)),
+      paged(()=>sb.from('payments').select('*').eq('client_id',id))]);
+    sales.sort((a,b)=>b.created_at-a.created_at);
+    pays.sort((a,b)=>b.created_at-a.created_at);
+    const valid=sales.filter(s=>!s.is_voided);
+    const vendido=valid.reduce((a,s)=>a+s.total_cents,0);
+    const fiado=valid.reduce((a,s)=>a+(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0),0);
+    const cobrado=pays.reduce((a,p)=>a+p.amount_cents,0);
+    const deuda=c.pending_amount||0;
+    const wa=waHref(c.phone);
+    const saleRows=sales.slice(0,100).map(s=>{
+      const state=s.is_voided?'<span class="tag bad">Anulada</span>':(s.is_on_account&&s.total_cents-(s.paid_cents||0)>0?'<span class="tag warn">Fiado</span>':'<span class="tag ok">Pagada</span>');
+      return `<tr><td>${fdt(s.created_at)}</td><td class="hide-sm">${PAY[s.payment_type]||s.payment_type}</td><td class="r">${money(s.total_cents)}</td><td class="r hide-sm">${money(s.paid_cents)}</td><td>${state}</td></tr>`;
+    }).join('');
+    const payRows=pays.slice(0,100).map(p=>`<tr><td>${fdt(p.created_at)}</td><td>${PAY[p.method]||p.method}</td><td class="r">${money(p.amount_cents)}</td></tr>`).join('');
+    d.innerHTML=`<h2>${esc(c.name)}</h2>
+    <p class="mu" style="margin:0 0 8px">${[c.localidad,c.address].filter(Boolean).map(esc).join(' · ')||'Sin dirección'}</p>
+    <div class="row" style="margin:0 0 10px">
+      ${c.active?'<span class="tag ok">Activo</span>':'<span class="tag mu">Inactivo</span>'}
+      ${c.has_dispenser?'<span class="tag ok">Con dispensador</span>':''}
+      ${deuda>0?`<span class="tag warn">Debe ${money(deuda)}</span>`:'<span class="tag ok">Sin deuda</span>'}
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin:0"><span>Teléfono</span><b>${c.phone?`<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`:'—'}</b></div>
+      <div class="row" style="justify-content:space-between;margin:0"><span>Dirección</span><b>${esc(c.address)||'—'}</b></div>
+      <div class="row" style="justify-content:space-between;margin:0"><span>Referencia</span><b>${esc(c.reference)||'—'}</b></div>
+      ${c.description?`<p class="mu" style="margin:6px 0 0">${esc(c.description)}</p>`:''}
+    </div>
+    <div class="grid">
+      <div class="card kpi"><small>Vendido</small><b>${money(vendido)}</b></div>
+      <div class="card kpi"><small>Fiado generado</small><b>${money(fiado)}</b></div>
+      <div class="card kpi"><small>Cobrado</small><b>${money(cobrado)}</b></div>
+    </div>
+    <details open style="margin-top:6px"><summary>Ventas (${sales.length})</summary>
+      <div class="tw"><table><thead><tr><th>Fecha</th><th class="hide-sm">Medio</th><th class="r">Total</th><th class="r hide-sm">Pagado</th><th>Estado</th></tr></thead><tbody>${saleRows||'<tr><td colspan="5" class="mu">Sin ventas.</td></tr>'}</tbody></table></div>
+      ${sales.length>100?`<p class="mu" style="font-size:12px">Mostrando las últimas 100 de ${sales.length}.</p>`:''}
+    </details>
+    <details style="margin-top:6px"><summary>Cobros (${pays.length})</summary>
+      <div class="tw"><table><thead><tr><th>Fecha</th><th>Medio</th><th class="r">Importe</th></tr></thead><tbody>${payRows||'<tr><td colspan="3" class="mu">Sin cobros.</td></tr>'}</tbody></table></div>
+      ${pays.length>100?`<p class="mu" style="font-size:12px">Mostrando los últimos 100 de ${pays.length}.</p>`:''}
+    </details>
+    <div class="row" style="margin-top:14px;justify-content:flex-end">
+      ${wa?`<a href="${wa}" target="_blank" rel="noopener"><button type="button">WhatsApp</button></a>`:''}
+      <button id="x">Cerrar</button></div>`;
+    $('#x').onclick=()=>d.close();
+  }catch(e){d.close()}
+}
 function vCash(){
   const uids=[...new Set(closed().map(c=>c.opened_by).filter(Boolean))]
     .map(id=>({id,name:nameOf(id)})).sort((a,b)=>a.name.localeCompare(b.name));

@@ -7,11 +7,24 @@ https://ammgx.github.io/ManantialDeMisiones-/
 ## Qué incluye
 
 - **Resumen:** último cierre, ventas registradas, cajas sin controlar y deuda de clientes.
+- **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
 - **Precios:** productos, precios e historial de cambios.
 - **Usuarios:** nombre, rol y estado (alta de usuarios desde Supabase).
 - **Cuenta:** cambio de contraseña y respaldo general.
 - **Archivo:** descarga mensual de cajas y consulta de archivos guardados.
+
+## Clientes
+
+- Buscador por nombre, teléfono, dirección, localidad, referencia o descripción.
+- Totales arriba: clientes, con deuda, deuda total e inactivos.
+- Filtros: todos, con deuda, activos e inactivos.
+- **Ver** abre la ficha con: contacto, deuda actual, total vendido, fiado generado,
+  total cobrado, últimas ventas y últimos cobros.
+- **Exportar CSV** descarga la lista filtrada.
+
+> Los datos del cliente se editan desde la app. El panel solo consulta, para no
+> pisar cambios con la sincronización del celular.
 
 ## Cierres de caja
 
@@ -56,5 +69,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.2`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.3`) para confirmar qué
 versión está publicada.
