@@ -84,7 +84,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.4</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.5</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -713,11 +713,68 @@ function editProd(id){
 }
 
 function vUsers(){
-  return `<div class="card"><h2>Usuarios</h2>
-  <div class="tw"><table><thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b>${u.id===ME.id?' <span class="mu">(vos)</span>':''}</td><td>${u.role=='ADMIN'?'Administrador':'Vendedor'}</td><td><span class="tag ${u.active?'ok':'mu'}">${u.active?'Activo':'Baja'}</span></td><td><button class="sm" data-id="${u.id}">Editar</button></td></tr>`).join('')}</tbody></table></div>
-  <p class="mu" style="font-size:13px">Para crear o restablecer usuarios: Supabase → Authentication → Users.</p></div>`;
+  const admin=ME&&ME.role==='ADMIN';
+  return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Usuarios</h2>
+  ${admin?'<button class="pri" id="uadd">+ Usuario</button>':''}</div>
+  <div class="tw"><table><thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b>${u.id===ME.id?' <span class="mu">(vos)</span>':''}</td><td>${u.role=='ADMIN'?'Administrador':'Vendedor'}</td><td><span class="tag ${u.active?'ok':'mu'}">${u.active?'Activo':'Baja'}</span></td><td><div class="row" style="margin:0;gap:6px;flex-wrap:nowrap"><button class="sm" data-id="${u.id}">Editar</button>${admin?`<button class="sm" data-pw="${u.id}">Contraseña</button>`:''}</div></td></tr>`).join('')}</tbody></table></div></div>`;
 }
-bind.users=()=>{$('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editUser(b.dataset.id))};
+bind.users=()=>{
+  $('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editUser(b.dataset.id));
+  $('#view').querySelectorAll('button[data-pw]').forEach(b=>b.onclick=()=>resetPassword(b.dataset.pw));
+  if($('#uadd'))$('#uadd').onclick=newUser;
+};
+function authErr(e){
+  const m=String((e&&e.message)||e||'');
+  if(/Could not find the function|schema cache|admin_create_user|admin_set_password/i.test(m))
+    return 'Falta aplicar el SQL de usuarios en Supabase (sql/usuarios.sql).';
+  if(/duplicate key|already registered|ya existe/i.test(m))return 'Ya existe un usuario con ese email.';
+  return m;
+}
+function newUser(){
+  const d=$('#dlg');
+  d.innerHTML=`<h2>Nuevo usuario</h2>
+  <label>Nombre</label><input id="nn" placeholder="Nombre y apellido" autocomplete="off">
+  <label>Email</label><input id="ne" type="email" placeholder="usuario@correo.com" autocomplete="off">
+  <label>Rol</label><select id="nr"><option value="VENDEDOR">Vendedor</option><option value="ADMIN">Administrador</option></select>
+  <label>Contraseña</label><input id="np" type="password" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
+  <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Crear usuario</button></div>`;
+  $('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{
+    const name=$('#nn').value.trim(),email=$('#ne').value.trim().toLowerCase(),pass=$('#np').value,role=$('#nr').value;
+    if(!name)return alert('Ingresá el nombre');
+    if(!email||email.indexOf('@')<1)return alert('Ingresá un email válido');
+    if(pass.length<8)return alert('La contraseña debe tener al menos 8 caracteres');
+    const btn=$('#sv');btn.disabled=true;btn.textContent='Creando…';
+    const r=await sb.rpc('admin_create_user',{p_email:email,p_password:pass,p_name:name,p_role:role});
+    if(r.error){btn.disabled=false;btn.textContent='Crear usuario';return alert('No se pudo crear: '+authErr(r.error))}
+    const prof=Array.isArray(r.data)?r.data[0]:r.data;
+    if(prof&&prof.id)S.users.push(prof);
+    else {const rows=ok(await sb.from('profiles').select('*'));S.users=rows}
+    S.users.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+    d.close();render();
+    alert('Usuario creado. Ya puede ingresar con ese email y contraseña.');
+  };
+  d.showModal();
+}
+function resetPassword(id){
+  const u=S.users.find(x=>x.id===id);if(!u)return;
+  const d=$('#dlg');
+  d.innerHTML=`<h2>Restablecer contraseña</h2><p class="mu" style="margin-top:0">${esc(u.name)}</p>
+  <label>Nueva contraseña</label><input id="np1" type="password" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
+  <label>Repetir contraseña</label><input id="np2" type="password" placeholder="Repetí la contraseña" autocomplete="new-password">
+  <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Cambiar contraseña</button></div>`;
+  $('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{
+    const a=$('#np1').value,b=$('#np2').value;
+    if(a.length<8)return alert('La contraseña debe tener al menos 8 caracteres');
+    if(a!==b)return alert('Las contraseñas no coinciden');
+    const btn=$('#sv');btn.disabled=true;btn.textContent='Cambiando…';
+    const r=await sb.rpc('admin_set_password',{p_user_id:id,p_password:a});
+    if(r.error){btn.disabled=false;btn.textContent='Cambiar contraseña';return alert('No se pudo cambiar: '+authErr(r.error))}
+    d.close();alert('Contraseña actualizada. El usuario debe usar la nueva la próxima vez que ingrese.');
+  };
+  d.showModal();
+}
 function editUser(id){
   const u=S.users.find(x=>x.id===id),me=id===ME.id,d=$('#dlg');
   d.innerHTML=`<h2>Editar usuario</h2><label>Nombre</label><input id="un" value="${esc(u.name)}">
@@ -739,13 +796,31 @@ function editUser(id){
 
 function vAcct(){
   return `<div class="card"><h2>Mi contraseña</h2><div class="row"><input id="np1" type="password" placeholder="Nueva contraseña (mín. 8 caracteres)" style="max-width:320px"><button id="spw">Cambiar</button></div></div>
-  <div class="card"><h2>Respaldo</h2><p class="mu" style="margin-top:0">Descargá una copia de productos, usuarios, clientes y cierres.</p><button id="bk">Descargar respaldo</button></div>`;
+  <div class="card"><h2>Respaldo completo</h2>
+   <p class="mu" style="margin-top:0">Descarga un JSON con todas las cajas (abiertas y cerradas), ventas, ítems, cobros, movimientos, clientes, productos, usuarios y cambios de precio. No incluye emails ni contraseñas.</p>
+   <div class="row" style="margin:0"><button id="bk">Descargar respaldo</button><span id="bkmsg" class="mu" style="font-size:13px"></span></div>
+   <p class="mu" style="font-size:12px;margin:8px 0 0">Para guardar solo un mes, usá la pestaña <b>Archivo</b>.</p>
+  </div>`;
 }
 bind.acct=()=>{
   $('#spw').onclick=async()=>{const v=$('#np1').value;if(v.length<8)return alert('Mínimo 8 caracteres');const {error}=await sb.auth.updateUser({password:v});alert(error?'Error: '+error.message:'Contraseña actualizada');$('#np1').value=''};
   $('#bk').onclick=async()=>{
-    let all=[],from=0;for(;;){const r=ok(await sb.from('sales').select('*').order('created_at').order('id').range(from,from+999));all=all.concat(r);if(r.length<1000)break;from+=1000}
-    dl('respaldo-aguas-misiones-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify({...S,sales:all},null,2),'application/json');
+    const btn=$('#bk'),msg=$('#bkmsg');
+    const step=t=>{if(msg)msg.textContent=t};
+    btn.disabled=true;btn.textContent='Generando…';
+    try{
+      step('Cajas…');const sessions=await paged(()=>sb.from('cash_sessions').select('*'));
+      step('Ventas…');const sales=await paged(()=>sb.from('sales').select('*'));
+      step('Ítems…');const items=await paged(()=>sb.from('sale_items').select('*'));
+      step('Cobros…');const pays=await paged(()=>sb.from('payments').select('*'));
+      step('Movimientos…');const movs=await paged(()=>sb.from('cash_movements').select('*'));
+      const data={version:1,type:'respaldo-completo',generated_at:Date.now(),
+        cash_sessions:sessions,sales,sale_items:items,payments:pays,cash_movements:movs,
+        clients:S.clients,products:S.products,profiles:S.users,price_log:S.price_log};
+      dl('respaldo-completo-'+isoDay(Date.now())+'.json',JSON.stringify(data,null,2),'application/json');
+      step('Listo · archivo descargado.');
+    }catch(e){step('No se pudo generar el respaldo.')}
+    finally{btn.disabled=false;btn.textContent='Descargar respaldo'}
   };
 };
 </script>

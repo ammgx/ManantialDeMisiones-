@@ -11,8 +11,8 @@ https://ammgx.github.io/ManantialDeMisiones-/
 - **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
 - **Precios:** productos, precios e historial de cambios.
-- **Usuarios:** nombre, rol y estado (alta de usuarios desde Supabase).
-- **Cuenta:** cambio de contraseña y respaldo general.
+- **Usuarios:** crear usuarios, cambiar roles, dar de baja y restablecer contraseñas.
+- **Cuenta:** cambio de contraseña y respaldo completo.
 - **Archivo:** descarga mensual de cajas y consulta de archivos guardados.
 
 ## Ventas
@@ -40,6 +40,33 @@ https://ammgx.github.io/ManantialDeMisiones-/
 
 > Los datos del cliente se editan desde la app. El panel solo consulta, para no
 > pisar cambios con la sincronización del celular.
+
+## Usuarios
+
+Desde la pestaña **Usuarios** un administrador puede:
+
+- **+ Usuario**: crear una cuenta con nombre, email, rol y contraseña.
+- **Editar**: cambiar nombre, rol o estado (activo/baja).
+- **Contraseña**: asignar una contraseña nueva a cualquier usuario.
+
+El email y la contraseña son los mismos que se usan para entrar a la app.
+El usuario creado queda confirmado y puede ingresar de inmediato.
+
+> La creación y el cambio de contraseña usan dos funciones seguras de Supabase.
+> Hay que aplicar el SQL de [sql/usuarios.sql](sql/usuarios.sql) **una sola vez**:
+> Supabase → SQL Editor → pegar el archivo → Run. Sin ese paso, el panel muestra
+> un aviso al intentar crear o cambiar una contraseña.
+
+## Respaldo completo
+
+En **Cuenta → Respaldo completo** se descarga un JSON con:
+
+- todas las cajas, abiertas y cerradas;
+- ventas, ítems, cobros y movimientos;
+- clientes, productos, usuarios y cambios de precio.
+
+No incluye emails ni contraseñas de acceso. Para guardar solo un mes, usar la
+pestaña **Archivo**.
 
 ## Cierres de caja
 
@@ -84,5 +111,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.4`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.5`) para confirmar qué
 versión está publicada.
