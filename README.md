@@ -11,7 +11,7 @@ https://ammgx.github.io/ManantialDeMisiones-/
 - **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
 - **Precios:** productos, precios, orden manual e historial de cambios.
-- **Usuarios:** crear usuarios, cambiar roles, dar de baja y restablecer contraseñas.
+- **Usuarios:** listado del equipo, cambio de nombre, rol y estado, y restablecer contraseñas.
 - **Cuenta:** cambio de contraseña y respaldo completo.
 - **Archivo:** descarga mensual de cajas y consulta de archivos guardados.
 
@@ -72,19 +72,18 @@ Es la pantalla de trabajo: entrás y ves qué falta hacer.
 
 ## Usuarios
 
-Desde la pestaña **Usuarios** un administrador puede:
+La pestaña **Usuarios** muestra el equipo con su rol y estado. Desde ahí se puede:
 
-- **+ Usuario**: crear una cuenta con nombre, email, rol y contraseña.
 - **Editar**: cambiar nombre, rol o estado (activo/baja).
 - **Contraseña**: asignar una contraseña nueva a cualquier usuario.
 
 El email y la contraseña son los mismos que se usan para entrar a la app.
-El usuario creado queda confirmado y puede ingresar de inmediato.
+Las cuentas nuevas se gestionan fuera del panel.
 
-> La creación y el cambio de contraseña usan dos funciones seguras de Supabase.
+> El cambio de contraseña usa una función segura de Supabase.
 > Hay que aplicar el SQL de [sql/usuarios.sql](sql/usuarios.sql) **una sola vez**:
 > Supabase → SQL Editor → pegar el archivo → Run. Sin ese paso, el panel muestra
-> un aviso al intentar crear o cambiar una contraseña.
+> un aviso al intentar cambiar una contraseña.
 
 ## Respaldo completo
 
@@ -141,5 +140,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.7`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.8`) para confirmar qué
 versión está publicada.

@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.7</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.8</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -934,47 +934,18 @@ function editProd(id){
 
 function vUsers(){
   const admin=ME&&ME.role==='ADMIN';
-  return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Usuarios</h2>
-  ${admin?'<button class="pri" id="uadd">+ Usuario</button>':''}</div>
+  return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Usuarios</h2></div>
   <div class="tw"><table><thead><tr><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${S.users.map(u=>`<tr><td><b>${esc(u.name)}</b>${u.id===ME.id?' <span class="mu">(vos)</span>':''}</td><td>${u.role=='ADMIN'?'Administrador':'Vendedor'}</td><td><span class="tag ${u.active?'ok':'mu'}">${u.active?'Activo':'Baja'}</span></td><td><div class="row" style="margin:0;gap:6px;flex-wrap:nowrap"><button class="sm" data-id="${u.id}">Editar</button>${admin?`<button class="sm" data-pw="${u.id}">Contraseña</button>`:''}</div></td></tr>`).join('')}</tbody></table></div></div>`;
 }
 bind.users=()=>{
   $('#view').querySelectorAll('button[data-id]').forEach(b=>b.onclick=()=>editUser(b.dataset.id));
   $('#view').querySelectorAll('button[data-pw]').forEach(b=>b.onclick=()=>resetPassword(b.dataset.pw));
-  if($('#uadd'))$('#uadd').onclick=newUser;
 };
 function authErr(e){
   const m=String((e&&e.message)||e||'');
-  if(/Could not find the function|schema cache|admin_create_user|admin_set_password/i.test(m))
+  if(/Could not find the function|schema cache|admin_set_password/i.test(m))
     return 'Falta aplicar el SQL de usuarios en Supabase (sql/usuarios.sql).';
-  if(/duplicate key|already registered|ya existe/i.test(m))return 'Ya existe un usuario con ese email.';
   return m;
-}
-function newUser(){
-  const d=$('#dlg');
-  d.innerHTML=`<h2>Nuevo usuario</h2>
-  <label>Nombre</label><input id="nn" placeholder="Nombre y apellido" autocomplete="off">
-  <label>Email</label><input id="ne" type="email" placeholder="usuario@correo.com" autocomplete="off">
-  <label>Rol</label><select id="nr"><option value="VENDEDOR">Vendedor</option><option value="ADMIN">Administrador</option></select>
-  <label>Contraseña</label><input id="np" type="password" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
-  <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Crear usuario</button></div>`;
-  $('#x').onclick=()=>d.close();
-  $('#sv').onclick=async()=>{
-    const name=$('#nn').value.trim(),email=$('#ne').value.trim().toLowerCase(),pass=$('#np').value,role=$('#nr').value;
-    if(!name)return alert('Ingresá el nombre');
-    if(!email||email.indexOf('@')<1)return alert('Ingresá un email válido');
-    if(pass.length<8)return alert('La contraseña debe tener al menos 8 caracteres');
-    const btn=$('#sv');btn.disabled=true;btn.textContent='Creando…';
-    const r=await sb.rpc('admin_create_user',{p_email:email,p_password:pass,p_name:name,p_role:role});
-    if(r.error){btn.disabled=false;btn.textContent='Crear usuario';return alert('No se pudo crear: '+authErr(r.error))}
-    const prof=Array.isArray(r.data)?r.data[0]:r.data;
-    if(prof&&prof.id)S.users.push(prof);
-    else {const rows=ok(await sb.from('profiles').select('*'));S.users=rows}
-    S.users.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
-    d.close();render();
-    alert('Usuario creado. Ya puede ingresar con ese email y contraseña.');
-  };
-  d.showModal();
 }
 function resetPassword(id){
   const u=S.users.find(x=>x.id===id);if(!u)return;
