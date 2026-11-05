@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.8</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.9</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -657,9 +657,9 @@ function renderRanking(list){
 function salesCsv(){
   const list=salesFiltered();
   if(!list.length)return alert('No hay ventas para los filtros elegidos.');
-  const h=['fecha','cliente','vendedor','medio','total','pagado','fiado','anulada','motivo_anulacion','notas'];
+  const h=['fecha','cliente','vendedor','medio','productos','aditivo','total','pagado','fiado','anulada','motivo_anulacion','notas'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=list.map(s=>[fdt(s.created_at),SALES.cli.get(s.client_id)||'Consumidor final',SALES.usr.get(s.created_by)||'',PAY[s.payment_type]||s.payment_type,s.total_cents/100,(s.paid_cents||0)/100,(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0)/100,s.is_voided?'SI':'NO',s.void_reason,s.notes].map(q).join(','));
+  const rows=list.map(s=>[fdt(s.created_at),SALES.cli.get(s.client_id)||'Consumidor final',SALES.usr.get(s.created_by)||'',PAY[s.payment_type]||s.payment_type,((s.total_cents||0)-(s.extra_cents||0))/100,(s.extra_cents||0)/100,s.total_cents/100,(s.paid_cents||0)/100,(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0)/100,s.is_voided?'SI':'NO',s.void_reason,s.notes].map(q).join(','));
   dl('ventas-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
 }
 function openSale(id){
@@ -674,6 +674,8 @@ function openSale(id){
    <div class="card">
     <div class="row" style="justify-content:space-between;margin:0"><span>Cliente</span><b>${esc(client||'Consumidor final')}</b></div>
     <div class="row" style="justify-content:space-between;margin:0"><span>Vendedor</span><b>${esc(seller)}</b></div>
+    ${(s.extra_cents||0)!==0?`<div class="row" style="justify-content:space-between;margin:0"><span>Productos</span><b>${money((s.total_cents||0)-(s.extra_cents||0))}</b></div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>Aditivo</span><b class="${s.extra_cents>0?'warn':'ok'}">${s.extra_cents>0?'+':'-'} ${money(Math.abs(s.extra_cents))}</b></div>`:''}
     <div class="row" style="justify-content:space-between;margin:0"><span>Total</span><b>${money(s.total_cents)}</b></div>
     <div class="row" style="justify-content:space-between;margin:0"><span>Pagado</span><b>${money(s.paid_cents)}</b></div>
     ${s.is_on_account?`<div class="row" style="justify-content:space-between;margin:0"><span>Saldo fiado</span><b class="${saldo?'warn':'ok'}">${money(saldo)}</b></div>`:''}

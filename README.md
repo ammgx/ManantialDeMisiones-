@@ -44,8 +44,10 @@ Es la pantalla de trabajo: entrás y ves qué falta hacer.
 - Filtros: mes, vendedor, medio de pago y búsqueda por cliente, producto o nota.
   Las ventas anuladas se ocultan por defecto; hay un tilde para incluirlas.
 - Tabla agrupada por mes; **Ver** abre el detalle con productos, pago, saldo y motivo de anulación.
+- Si la venta tiene **aditivo** (monto extra de un cliente con precio diferencial), el
+  detalle muestra el subtotal de productos y el aditivo con su signo. El total ya lo incluye.
 - **Productos más vendidos** se calcula con las ventas filtradas.
-- **Exportar CSV** descarga la lista filtrada completa.
+- **Exportar CSV** descarga la lista filtrada completa, con columnas `productos`, `aditivo` y `total`.
 
 > Si hay muchas ventas, la tabla muestra las últimas 300 para no trabar el celular.
 > Los totales y el CSV usan todas las ventas del filtro.
@@ -140,5 +142,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.8`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.9`) para confirmar qué
 versión está publicada.
