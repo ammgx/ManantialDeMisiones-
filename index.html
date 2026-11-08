@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.9</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.10</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -616,6 +616,11 @@ function fillSales(){
   const fiado=valid.reduce((a,s)=>a+(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0),0);
   const cobrado=paymentsFiltered().reduce((a,p)=>a+p.amount_cents,0);
   const avg=valid.length?Math.round(vendido/valid.length):0;
+  const paidBySale=new Map();
+  for(const p of SALES.pays){
+    if(!p.sale_id)continue;
+    paidBySale.set(p.sale_id,(paidBySale.get(p.sale_id)||0)+(p.amount_cents||0));
+  }
   $('#skpis').innerHTML=`
    <div class="card kpi"><small>Vendido</small><b>${money(vendido)}</b><small>${valid.length} ${valid.length==1?'venta':'ventas'}${SALF.voided?'':' · sin anuladas'}</small></div>
    <div class="card kpi"><small>Fiado generado</small><b>${money(fiado)}</b></div>
@@ -625,12 +630,13 @@ function fillSales(){
   const groups=groupByCreated(shown);
   $('#slist').innerHTML=groups.map(([k,vs],i)=>{
     const tot=vs.filter(s=>!s.is_voided).reduce((a,s)=>a+s.total_cents,0);
-    const fdo=vs.filter(s=>!s.is_voided).reduce((a,s)=>a+(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0),0);
+    const fdo=vs.filter(s=>!s.is_voided).reduce((a,s)=>a+(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)-(paidBySale.get(s.id)||0)):0),0);
     return `<details class="mg" ${i===0?'open':''}>
      <summary><span><b>${monthLabel(k)}</b> <span class="mu">· ${vs.length} ${vs.length==1?'venta':'ventas'} · ${money(tot)}</span></span>${fdo?`<span class="tag warn">Fiado ${money(fdo)}</span>`:''}</summary>
      <div class="tw"><table><thead><tr><th>Fecha</th><th>Cliente</th><th class="hide-sm">Vendedor</th><th class="hide-sm">Medio</th><th class="r">Total</th><th>Estado</th><th></th></tr></thead><tbody>
      ${vs.map(s=>{
-       const state=s.is_voided?'<span class="tag bad">Anulada</span>':(s.is_on_account&&s.total_cents-(s.paid_cents||0)>0?'<span class="tag warn">Fiado</span>':'<span class="tag ok">Pagada</span>');
+       const saldo=s.total_cents-(s.paid_cents||0)-(paidBySale.get(s.id)||0);
+       const state=s.is_voided?'<span class="tag bad">Anulada</span>':(s.is_on_account&&saldo>0?'<span class="tag warn">Fiado</span>':'<span class="tag ok">Pagada</span>');
        return `<tr><td>${fdt(s.created_at)}</td><td>${esc(SALES.cli.get(s.client_id)||'Consumidor final')}</td><td class="hide-sm">${esc(SALES.usr.get(s.created_by)||'—')}</td><td class="hide-sm">${PAY[s.payment_type]||s.payment_type}</td><td class="r"><b>${money(s.total_cents)}</b></td><td>${state}</td><td><button class="sm" data-sid="${s.id}">Ver</button></td></tr>`;
      }).join('')}
      </tbody></table></div></details>`;
@@ -659,7 +665,9 @@ function salesCsv(){
   if(!list.length)return alert('No hay ventas para los filtros elegidos.');
   const h=['fecha','cliente','vendedor','medio','productos','aditivo','total','pagado','fiado','anulada','motivo_anulacion','notas'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=list.map(s=>[fdt(s.created_at),SALES.cli.get(s.client_id)||'Consumidor final',SALES.usr.get(s.created_by)||'',PAY[s.payment_type]||s.payment_type,((s.total_cents||0)-(s.extra_cents||0))/100,(s.extra_cents||0)/100,s.total_cents/100,(s.paid_cents||0)/100,(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0)/100,s.is_voided?'SI':'NO',s.void_reason,s.notes].map(q).join(','));
+  const linkedBySale=new Map();
+  for(const p of SALES.pays){if(!p.sale_id)continue;linkedBySale.set(p.sale_id,(linkedBySale.get(p.sale_id)||0)+(p.amount_cents||0));}
+  const rows=list.map(s=>[fdt(s.created_at),SALES.cli.get(s.client_id)||'Consumidor final',SALES.usr.get(s.created_by)||'',PAY[s.payment_type]||s.payment_type,((s.total_cents||0)-(s.extra_cents||0))/100,(s.extra_cents||0)/100,s.total_cents/100,((s.paid_cents||0)+(linkedBySale.get(s.id)||0))/100,(s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)-(linkedBySale.get(s.id)||0)):0)/100,s.is_voided?'SI':'NO',s.void_reason,s.notes].map(q).join(','));
   dl('ventas-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
 }
 function openSale(id){
@@ -667,7 +675,9 @@ function openSale(id){
   const items=SALES.itemsBy.get(id)||[];
   const client=SALES.cli.get(s.client_id);
   const seller=SALES.usr.get(s.created_by)||'—';
-  const saldo=s.is_on_account?Math.max(0,s.total_cents-(s.paid_cents||0)):0;
+  const linked=SALES.pays.filter(p=>p.sale_id===id).reduce((a,p)=>a+(p.amount_cents||0),0);
+  const paidTotal=(s.paid_cents||0)+linked;
+  const saldo=s.is_on_account?Math.max(0,s.total_cents-paidTotal):0;
   const d=$('#dlg');
   d.innerHTML=`<h2>Venta del ${fdt(s.created_at)}</h2>
    <div class="row" style="margin:0 0 10px">${s.is_voided?'<span class="tag bad">Anulada</span>':(s.is_on_account&&saldo>0?'<span class="tag warn">Fiado</span>':'<span class="tag ok">Pagada</span>')}<span class="tag mu">${PAY[s.payment_type]||s.payment_type}</span></div>
@@ -677,7 +687,8 @@ function openSale(id){
     ${(s.extra_cents||0)!==0?`<div class="row" style="justify-content:space-between;margin:0"><span>Productos</span><b>${money((s.total_cents||0)-(s.extra_cents||0))}</b></div>
     <div class="row" style="justify-content:space-between;margin:0"><span>Aditivo</span><b class="${s.extra_cents>0?'warn':'ok'}">${s.extra_cents>0?'+':'-'} ${money(Math.abs(s.extra_cents))}</b></div>`:''}
     <div class="row" style="justify-content:space-between;margin:0"><span>Total</span><b>${money(s.total_cents)}</b></div>
-    <div class="row" style="justify-content:space-between;margin:0"><span>Pagado</span><b>${money(s.paid_cents)}</b></div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>Pagado</span><b>${money(paidTotal)}</b></div>
+    ${linked>0?`<div class="row" style="justify-content:space-between;margin:0"><span>Cobrado después</span><b class="ok">${money(linked)}</b></div>`:''}
     ${s.is_on_account?`<div class="row" style="justify-content:space-between;margin:0"><span>Saldo fiado</span><b class="${saldo?'warn':'ok'}">${money(saldo)}</b></div>`:''}
     ${s.is_voided&&s.void_reason?`<p class="bad" style="margin:6px 0 0">Motivo de anulación: ${esc(s.void_reason)}</p>`:''}
     ${s.notes?`<p class="mu" style="margin:6px 0 0">Nota: ${esc(s.notes)}</p>`:''}
