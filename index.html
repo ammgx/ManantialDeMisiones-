@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.10</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.11</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -233,27 +233,31 @@ function vHome(){
   const diffs=cl.filter(c=>declDiff(c)!==0);
   const debt=S.clients.reduce((a,c)=>a+Math.max(0,c.pending_amount||0),0);
   const withDebt=S.clients.filter(c=>c.pending_amount>0).length;
-  const old=op.filter(c=>Date.now()-c.opened_at>24*3600*1000).length;
   const opData=op.map(c=>({c,d:dataFor(c)}));
   const known=opData.filter(x=>x.d).map(x=>({c:x.c,st:statsOf(x.c,x.d)}));
   const active=known.filter(x=>!x.st.empty);
   const empty=known.filter(x=>x.st.empty);
   const unknown=opData.filter(x=>!x.d);
+  // Sólo cuentan como "abiertas" las que ya registraron algo (o cuya actividad
+  // todavía no se pudo cargar). Una caja recién abierta y vacía no aparece.
+  const openList=[...active,...unknown];
+  const openCount=openList.length;
+  const old=openList.filter(x=>Date.now()-x.c.opened_at>24*3600*1000).length;
   const recent=[...new Map([...pend,...cl.slice(0,5)].map(c=>[c.id,c])).values()].sort((a,b)=>b.closed_at-a.closed_at);
-  const openCards=[...active,...unknown].map(({c,st})=>cajaCard(c,st,true)).join('');
+  const openCards=openList.map(({c,st})=>cajaCard(c,st,true)).join('');
   return `<div class="card"><div class="row" style="margin:0 0 10px"><h2 style="flex:1;margin:0">Pendientes</h2><button class="sm" id="href">Actualizar</button></div>
    <div class="pend">
-    <button class="${old?'warn':''}" id="popen"><small>Cajas abiertas</small><b>${op.length}</b><small>${old?old+' hace +24 h':'al día'}</small></button>
+    <button class="${old?'warn':''}" id="popen"><small>Cajas abiertas</small><b>${openCount}</b><small>${old?old+' hace +24 h':'al día'}</small></button>
     <button class="${pend.length?'warn':''}" id="ppend"><small>Sin controlar</small><b>${pend.length}</b><small>cierres cerrados</small></button>
     <button class="${diffs.length?'bad':''}" id="pdiff"><small>Con diferencia</small><b>${diffs.length}</b><small>arqueos</small></button>
     <button id="pdebt"><small>Deuda clientes</small><b>${money(debt)}</b><small>${withDebt} cliente${withDebt===1?'':'s'}</small></button>
    </div></div>
-   <div class="sechead" id="sec-open"><h2>Cajas abiertas</h2><span class="count">${op.length}</span><span class="sp"></span></div>
+   <div class="sechead" id="sec-open"><h2>Cajas abiertas</h2><span class="count">${openCount}</span><span class="sp"></span></div>
    <p class="empty-note">Tocá una tarjeta para ver el informe completo. Las cajas se cierran desde la app del vendedor.</p>
    ${HOME.error?`<div class="card"><p class="bad" style="margin:0">No se pudieron cargar los totales: ${esc(HOME.error)}</p><button class="sm" id="hretry" style="margin-top:8px">Reintentar</button></div>`:''}
-   ${openCards||'<p class="mu">No hay cajas abiertas.</p>'}
+   ${openCards||'<p class="mu">No hay cajas abiertas con actividad.</p>'}
    ${HOME.loading?`<p class="mu" style="font-size:13px">Cargando totales de las cajas abiertas…</p>`:''}
-   ${empty.length?`<p class="empty-note">${empty.length} caja${empty.length===1?'':'s'} sin actividad (sin ventas, cobros ni movimientos) · <a href="#" id="tempty">${SHOW_EMPTY?'ocultar':'mostrar'}</a></p>${SHOW_EMPTY?empty.map(({c,st})=>cajaCard(c,st,true)).join(''):''}`:''}
+   ${empty.length?`<p class="empty-note">${empty.length} caja${empty.length===1?'':'s'} recién abierta${empty.length===1?'':'s'} sin actividad, no contada${empty.length===1?'':'s'} · <a href="#" id="tempty">${SHOW_EMPTY?'ocultar':'mostrar'}</a></p>${SHOW_EMPTY?empty.map(({c,st})=>cajaCard(c,st,true)).join(''):''}`:''}
    <div class="sechead"><h2>Cajas cerradas</h2><span class="count">${recent.length}${cl.length>recent.length?' de '+cl.length:''}</span><span class="sp"></span><button class="sm" id="gall">Ver todas</button></div>
    <p class="empty-note">Primero las pendientes de control y los últimos cierres. El historial completo, con filtros y exportación, está en <b>Cierres de caja</b>.</p>
    ${recent.map(c=>cajaCard(c,null,false)).join('')||'<p class="mu">Todavía no hay cajas cerradas.</p>'}`;
