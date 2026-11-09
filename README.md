@@ -26,8 +26,9 @@ Es la pantalla de trabajo: entrás y ves qué falta hacer.
   Muestran vendedor, tiempo abierto, vendido, cobrado, egresos y efectivo esperado.
   Al tocar la tarjeta se despliega el informe completo (ventas, cobros y movimientos)
   sin salir de la página.
-- **Cajas sin actividad:** las cajas abiertas sin ventas, cobros ni movimientos
-  quedan ocultas para no llenar la pantalla. Hay un enlace para mostrarlas.
+- **Cajas sin actividad:** las cajas recién abiertas sin ventas, cobros ni
+  movimientos no se cuentan como abiertas ni aparecen en la lista. Hay un enlace
+  para verlas igual, pero no suman al número de pendientes.
 - **Cajas cerradas:** primero las pendientes de control y los últimos cierres,
   con el mismo informe desplegable y el botón **Revisar caja**.
 - El historial completo, los filtros por mes/usuario/estado y la exportación
@@ -145,5 +146,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.10`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.11`) para confirmar qué
 versión está publicada.
