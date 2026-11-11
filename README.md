@@ -109,6 +109,9 @@ pestaña **Archivo**.
 - Cada grupo muestra cantidad de cajas, total y pendientes de control.
 - Filtros: **usuario** (quién abrió la caja) y **estado** (pendiente, conforme, observado).
 - Desde el Resumen, el acceso **Con diferencia** muestra solo los arqueos desparejos.
+- El **cambio inicial** (lo que quedó en el cajón al cerrar la caja anterior) suma al
+  total disponible y al efectivo esperado, igual que en la app. Aparece como un renglón
+  aparte en el detalle del cierre.
 - **Exportar CSV** descarga exactamente lo que está filtrado en pantalla.
 
 ## Archivo de cajas (para no llenar Supabase)

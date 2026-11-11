@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.12</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.13</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -139,7 +139,8 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const money=c=>'$ '+((c||0)/100).toLocaleString('es-AR',{maximumFractionDigits:2});
 const fdt=t=>t?new Date(Number(t)).toLocaleString('es-AR',{dateStyle:'short',timeStyle:'short'}):'—';
 const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',DEBITO:'Débito'};
-const avail=c=>c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
+// El cambio inicial (lo que dejó el cierre anterior) ya está en el cajón: suma al disponible.
+const avail=c=>(c.opening_cash_cents||0)+c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
 let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[],transfers:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
 let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
@@ -284,9 +285,11 @@ function statsOf(c,d){
   const efectivoCobros=sum(pays.filter(p=>p.method=='EFECTIVO'),p=>p.amount_cents||0);
   const egresosEfectivo=sum(movs.filter(m=>m.type=='EGRESO'&&m.method=='EFECTIVO'),m=>m.amount_cents||0);
   const fiado=ss.reduce((a,s)=>a+(s.is_on_account?Math.max(0,(s.total_cents||0)-(s.paid_cents||0)):0),0);
+  // El cambio inicial de la caja ya estaba en el cajón: suma al efectivo y al disponible.
+  const opening=c.opening_cash_cents||0;
   return {ventas:ss.length,cobros:pays.length,movs:movs.length,vendido,pagado,cobrado,egresos,
-    efectivo:efectivoVentas+efectivoCobros-egresosEfectivo,
-    disponible:pagado+cobrado-egresos,fiado,
+    efectivo:opening+efectivoVentas+efectivoCobros-egresosEfectivo,
+    disponible:opening+pagado+cobrado-egresos,fiado,
     empty:!ss.length&&!pays.length&&!movs.length};
 }
 async function loadHome(){
@@ -825,6 +828,7 @@ async function openCash(id){
   <p class="mu" style="margin-top:0">Apertura ${fdt(c.opened_at)} · ${ss.length} ventas · Total ${money(c.total_cents)}</p>
   <div class="card">
   <div class="row" style="justify-content:space-between;margin:0"><span>Total disponible según la app</span><b>${money(avail(c))}</b></div>
+  ${(c.opening_cash_cents||0)>0?`<div class="row" style="justify-content:space-between;margin:0"><span class="mu">Cambio inicial (del cierre anterior)</span><b>${money(c.opening_cash_cents)}</b></div>`:''}
   <div class="row" style="justify-content:space-between;margin:0"><span>Contado por quien cerró</span><b>${money(c.counted_cents)}</b></div>
   <p class="${dd==0?'ok':'bad'}" style="margin:4px 0 8px;font-weight:600">Diferencia declarada: ${dd==0?'exacta ✔':(dd>0?'sobrante ':'faltante ')+money(Math.abs(dd))}</p>
   <div class="row" style="justify-content:space-between;margin:0"><span>Egresos de caja</span><b>${money(c.total_expenses_cents)}</b></div>
@@ -949,6 +953,7 @@ function openArchiveCash(id){
   <p class="mu" style="margin-top:0">Archivo · Apertura ${fdt(c.opened_at)} · ${ss.length} ventas · Total ${money(c.total_cents)}</p>
   <div class="card">
   <div class="row" style="justify-content:space-between;margin:0"><span>Total disponible según la app</span><b>${money(avail(c))}</b></div>
+  ${(c.opening_cash_cents||0)>0?`<div class="row" style="justify-content:space-between;margin:0"><span class="mu">Cambio inicial (del cierre anterior)</span><b>${money(c.opening_cash_cents)}</b></div>`:''}
   <div class="row" style="justify-content:space-between;margin:0"><span>Contado por quien cerró</span><b>${money(c.counted_cents)}</b></div>
   <p class="${dd==0?'ok':'bad'}" style="margin:4px 0 8px;font-weight:600">Diferencia declarada: ${dd==0?'exacta ✔':(dd>0?'sobrante ':'faltante ')+money(Math.abs(dd))}</p>
   <div class="row" style="justify-content:space-between;margin:0"><span>Egresos de caja</span><b>${money(c.total_expenses_cents)}</b></div>
