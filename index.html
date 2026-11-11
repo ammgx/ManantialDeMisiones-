@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.11</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.12</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -141,7 +141,7 @@ const fdt=t=>t?new Date(Number(t)).toLocaleString('es-AR',{dateStyle:'short',tim
 const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',DEBITO:'Débito'};
 const avail=c=>c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
+let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[],transfers:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
 let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
 let HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
 let CASH_DATA=new Map();   // id de caja -> {ss,pays,movs} ya cargado
@@ -177,16 +177,18 @@ async function paged(build,onPage){
 }
 
 async function load(){
-  const [p,u,c,pl,cs]=await Promise.all([
+  const [p,u,c,pl,cs,tr]=await Promise.all([
     paged(()=>sb.from('products').select('*')),
     paged(()=>sb.from('profiles').select('*')),
     paged(()=>sb.from('clients').select('*')),
     sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30),
-    paged(()=>sb.from('cash_sessions').select('*'))]);
+    paged(()=>sb.from('cash_sessions').select('*')),
+    paged(()=>sb.from('client_transfers').select('*')).catch(()=>[])]);
   S.products=p.sort(byProdOrder);
   S.users=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
   S.clients=c;
   S.cash_sessions=cs;
+  S.transfers=tr.sort((a,b)=>(b.created_at||0)-(a.created_at||0));
   S.price_log=ok(pl).map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
 }
 
@@ -403,8 +405,10 @@ function filteredClients(){
     if(CLIF.f==='debt'&&!(c.pending_amount>0))return false;
     if(CLIF.f==='active'&&!c.active)return false;
     if(CLIF.f==='inactive'&&c.active)return false;
+    if(CLIF.u&&c.created_by!==CLIF.u)return false;
+    if(CLIF.month!=='all'&&monthKey(c.created_at||0)!==CLIF.month)return false;
     if(!q)return true;
-    return [c.name,c.phone,c.address,c.localidad,c.reference,c.description]
+    return [c.name,c.phone,c.address,c.localidad,c.reference,c.description,nameOf(c.created_by)]
       .some(v=>String(v||'').toLowerCase().includes(q));
   }).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
 }
@@ -412,6 +416,15 @@ function vClients(){
   const debt=S.clients.reduce((a,c)=>a+Math.max(0,c.pending_amount||0),0);
   const withDebt=S.clients.filter(c=>c.pending_amount>0).length;
   const inactive=S.clients.filter(c=>!c.active).length;
+  const months=[...new Set(S.clients.map(c=>monthKey(c.created_at||0)))].sort().reverse();
+  if(CLIF.month!=='all'&&!months.includes(CLIF.month))CLIF.month='all';
+  const uids=[...new Set(S.clients.map(c=>c.created_by).filter(Boolean))]
+    .map(id=>({id,name:nameOf(id)})).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  const trName=id=>(S.clients.find(x=>x.id===id)||{}).name||'—';
+  const trs=S.transfers.slice(0,50);
+  const trTable=trs.length?`<div class="tw"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>De</th><th>A</th><th class="r">Deuda</th><th class="hide-sm">Nota</th></tr></thead><tbody>
+    ${trs.map(t=>`<tr><td>${fdt(t.created_at)}</td><td><b>${esc(trName(t.client_id))}</b></td><td>${esc(nameOf(t.from_user))}</td><td>${esc(nameOf(t.to_user))}</td><td class="r ${t.pending_amount>0?'warn':''}">${money(t.pending_amount)}</td><td class="hide-sm mu">${esc(t.note)||'—'}</td></tr>`).join('')}
+    </tbody></table></div>`:'<p class="mu">Todavía no se transfirió ningún cliente.</p>';
   return `<div class="grid">
    <div class="card kpi"><small>Clientes</small><b>${S.clients.length}</b></div>
    <div class="card kpi"><small>Con deuda</small><b class="${withDebt?'warn':'ok'}">${withDebt}</b></div>
@@ -427,21 +440,27 @@ function vClients(){
      <option value="active" ${CLIF.f==='active'?'selected':''}>Activos</option>
      <option value="inactive" ${CLIF.f==='inactive'?'selected':''}>Inactivos</option>
     </select>
+    <select id="cu" style="width:auto"><option value="">Todos los vendedores</option>${uids.map(u=>`<option value="${u.id}" ${CLIF.u===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+    <select id="cm" style="width:auto"><option value="all">Todas las altas</option>${months.map(k=>`<option value="${k}" ${CLIF.month===k?'selected':''}>${monthLabel(k)}</option>`).join('')}</select>
    </div>
    <div id="clist"></div>
-   <p class="mu" style="font-size:12px;margin:6px 0 0">Los datos de contacto y la deuda se editan desde la app; acá se consultan.</p>
-  </div>`;
+   <p class="mu" style="font-size:12px;margin:6px 0 0">Los datos de contacto y la deuda se editan desde la app; acá se consultan y se pueden transferir de vendedor.</p>
+  </div>
+  <div class="card"><div class="row"><h2 style="flex:1;margin:0">Transferencias de clientes</h2><span class="mu" style="font-size:12px">${S.transfers.length} en total</span></div>
+   <p class="mu" style="font-size:13px;margin-top:0">La ficha viaja con su deuda. Las ventas y los cobros quedan a nombre del vendedor original. Se bloquea si el vendedor actual tiene una caja abierta con movimientos.</p>
+   ${trTable}</div>`;
 }
 function fillClients(){
   const all=filteredClients(),list=all.slice(0,200);
   $('#clist').innerHTML=`<p class="mu" style="margin:0 0 6px;font-size:13px">${all.length} ${all.length==1?'cliente':'clientes'}${all.length>list.length?` · mostrando los primeros ${list.length}`:''}</p>
-   <div class="tw"><table><thead><tr><th>Cliente</th><th class="hide-sm">Teléfono</th><th class="r">Deuda</th><th>Estado</th><th></th></tr></thead><tbody>
+   <div class="tw"><table><thead><tr><th>Cliente</th><th class="hide-sm">Teléfono</th><th class="hide-sm">Vendedor</th><th class="r">Deuda</th><th>Estado</th><th></th></tr></thead><tbody>
    ${list.map(c=>`<tr>
     <td><b>${esc(c.name)}</b>${c.localidad?`<br><span class="mu">${esc(c.localidad)}</span>`:''}</td>
     <td class="hide-sm">${esc(c.phone)||'—'}</td>
+    <td class="hide-sm">${esc(nameOf(c.created_by))}</td>
     <td class="r ${c.pending_amount>0?'warn':''}"><b>${money(c.pending_amount)}</b></td>
     <td>${c.active?'<span class="tag ok">Activo</span>':'<span class="tag mu">Baja</span>'}</td>
-    <td><button class="sm" data-cid="${c.id}">Ver</button></td></tr>`).join('')||'<tr><td colspan="5" class="mu">Sin resultados.</td></tr>'}
+    <td><button class="sm" data-cid="${c.id}">Ver</button></td></tr>`).join('')||'<tr><td colspan="6" class="mu">Sin resultados.</td></tr>'}
    </tbody></table></div>`;
   $('#clist').querySelectorAll('button[data-cid]').forEach(b=>b.onclick=()=>openClient(b.dataset.cid));
 }
@@ -449,14 +468,16 @@ bind.clients=()=>{
   fillClients();
   $('#cq').oninput=e=>{CLIF.q=e.target.value;fillClients()};
   $('#cf').onchange=e=>{CLIF.f=e.target.value;fillClients()};
+  $('#cu').onchange=e=>{CLIF.u=e.target.value;fillClients()};
+  $('#cm').onchange=e=>{CLIF.month=e.target.value;fillClients()};
   $('#ccsv').onclick=clientsCsv;
 };
 function clientsCsv(){
   const list=filteredClients();
   if(!list.length)return alert('No hay clientes para los filtros elegidos.');
-  const h=['nombre','telefono','direccion','localidad','referencia','descripcion','deuda','activo','dispensador','ajuste_precio'];
+  const h=['nombre','telefono','direccion','localidad','referencia','descripcion','vendedor','deuda','activo','dispensador','ajuste_precio'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=list.map(c=>[c.name,c.phone,c.address,c.localidad,c.reference,c.description,(c.pending_amount||0)/100,c.active?'SI':'NO',c.has_dispenser?'SI':'NO',(c.price_diff_cents||0)/100].map(q).join(','));
+  const rows=list.map(c=>[c.name,c.phone,c.address,c.localidad,c.reference,c.description,nameOf(c.created_by),(c.pending_amount||0)/100,c.active?'SI':'NO',c.has_dispenser?'SI':'NO',(c.price_diff_cents||0)/100].map(q).join(','));
   dl('clientes-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
 }
 function waHref(phone){
@@ -494,6 +515,7 @@ async function openClient(id){
     </div>
     <div class="card">
       <div class="row" style="justify-content:space-between;margin:0"><span>Teléfono</span><b>${c.phone?`<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>`:'—'}</b></div>
+      <div class="row" style="justify-content:space-between;margin:0"><span>Vendedor</span><b>${esc(nameOf(c.created_by))}</b></div>
       <div class="row" style="justify-content:space-between;margin:0"><span>Dirección</span><b>${esc(c.address)||'—'}</b></div>
       <div class="row" style="justify-content:space-between;margin:0"><span>Referencia</span><b>${esc(c.reference)||'—'}</b></div>
       ${c.description?`<p class="mu" style="margin:6px 0 0">${esc(c.description)}</p>`:''}
@@ -513,9 +535,52 @@ async function openClient(id){
     </details>
     <div class="row" style="margin-top:14px;justify-content:flex-end">
       ${wa?`<a href="${wa}" target="_blank" rel="noopener"><button type="button">WhatsApp</button></a>`:''}
+      ${S.users.some(u=>u.active&&u.id!==c.created_by)?'<button id="trf">Transferir</button>':''}
       <button id="x">Cerrar</button></div>`;
     $('#x').onclick=()=>d.close();
+    if($('#trf'))$('#trf').onclick=()=>openTransfer(c.id);
   }catch(e){d.close()}
+}
+/**
+ * Transfiere la ficha (con su deuda) a otro usuario.
+ * Las ventas y cobros quedan a nombre del vendedor original y el servidor
+ * bloquea la operación si ese vendedor tiene una caja abierta con movimientos.
+ */
+function openTransfer(clientId){
+  const c=S.clients.find(x=>x.id===clientId);if(!c)return;
+  const others=S.users.filter(u=>u.active&&u.id!==c.created_by)
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  if(!others.length)return alert('No hay otro usuario activo para transferir.');
+  const d=$('#dlg');
+  d.innerHTML=`<h2>Transferir cliente</h2>
+   <p class="mu" style="margin-top:0">${esc(c.name)} · dueño actual: <b>${esc(nameOf(c.created_by))}</b></p>
+   <div class="card">
+    <div class="row" style="justify-content:space-between;margin:0"><span>Deuda que se mueve con la ficha</span><b class="${c.pending_amount>0?'warn':''}">${money(c.pending_amount)}</b></div>
+    <div class="row" style="justify-content:space-between;margin:0"><span>Ventas y cobros</span><b>Quedan con el vendedor original</b></div>
+   </div>
+   <label>Nuevo dueño</label>
+   <select id="tu">${others.map(u=>`<option value="${u.id}">${esc(u.name)}${u.role==='ADMIN'?' (administrador)':''}</option>`).join('')}</select>
+   <label>Nota (opcional)</label><input id="tn" placeholder="Motivo de la transferencia">
+   <p id="terr" class="bad hide" style="font-size:13px"></p>
+   <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv">Transferir</button></div>`;
+  $('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{
+    const btn=$('#sv'),err=$('#terr');
+    btn.disabled=true;btn.textContent='Transfiriendo…';err.classList.add('hide');
+    try{
+      const row=ok(await sb.rpc('transfer_client',{p_client_id:c.id,p_to_user:$('#tu').value,p_note:$('#tn').value.trim()}));
+      const tr=Array.isArray(row)?row[0]:row;
+      if(tr){c.created_by=tr.to_user;S.transfers.unshift(tr);S.transfers.sort((a,b)=>(b.created_at||0)-(a.created_at||0));}
+      const debt=c.pending_amount||0;
+      d.close();render();
+      alert('Cliente transferido a '+nameOf(tr?tr.to_user:c.created_by)+'. La deuda de '+money(debt)+' pasó con la ficha.');
+    }catch(e){
+      err.textContent='No se pudo transferir: '+((e&&e.message)||e);
+      err.classList.remove('hide');
+      btn.disabled=false;btn.textContent='Transferir';
+    }
+  };
+  d.showModal();
 }
 async function loadSales(){
   if(SALES.loading)return;
