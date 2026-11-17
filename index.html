@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.14</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.15</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -142,7 +142,7 @@ const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',D
 // El cambio inicial (lo que dejó el cierre anterior) y los ingresos de dinero suman al disponible.
 const avail=c=>(c.opening_cash_cents||0)+c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents+(c.total_income_cents||0)-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],clients:[],cash_sessions:[],price_log:[],transfers:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
+let S={products:[],users:[],usersAll:[],clients:[],cash_sessions:[],price_log:[],transfers:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
 let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
 let HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
 let CASH_DATA=new Map();   // id de caja -> {ss,pays,movs} ya cargado
@@ -186,7 +186,9 @@ async function load(){
     paged(()=>sb.from('cash_sessions').select('*')),
     paged(()=>sb.from('client_transfers').select('*')).catch(()=>[])]);
   S.products=p.sort(byProdOrder);
-  S.users=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  // Los usuarios ocultos (soporte) no se listan ni se editan en el panel.
+  S.usersAll=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  S.users=S.usersAll.filter(x=>!x.hidden);
   S.clients=c;
   S.cash_sessions=cs;
   S.transfers=tr.sort((a,b)=>(b.created_at||0)-(a.created_at||0));
@@ -227,7 +229,7 @@ function render(){
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
 const byProdOrder=(a,b)=>(Number(a.sort_order??0)-Number(b.sort_order??0))||String(a.name||'').localeCompare(String(b.name||''),'es');
-const nameOf=id=>(S.users.find(u=>u.id===id)||{}).name||'—';
+const nameOf=id=>(S.usersAll||S.users||[]).find(u=>u.id===id)?.name||'—';
 
 function vHome(){
   const op=S.cash_sessions.filter(c=>!c.is_closed).sort((a,b)=>a.opened_at-b.opened_at);

@@ -86,6 +86,10 @@ La pestaña **Usuarios** muestra el equipo con su rol y estado. Desde ahí se pu
 El email y la contraseña son los mismos que se usan para entrar a la app.
 Las cuentas nuevas se gestionan fuera del panel.
 
+> Los usuarios marcados como **ocultos** (cuenta de soporte) no aparecen en la lista,
+> no se pueden elegir en los filtros ni modificar desde el panel. La base también los
+> protege: cualquier intento de edición o borrado desde el panel se rechaza.
+
 > El cambio de contraseña usa una función segura de Supabase.
 > Hay que aplicar el SQL de [sql/usuarios.sql](sql/usuarios.sql) **una sola vez**:
 > Supabase → SQL Editor → pegar el archivo → Run. Sin ese paso, el panel muestra
