@@ -65,8 +65,16 @@ Es la pantalla de trabajo: entrás y ves qué falta hacer.
   total cobrado, últimas ventas y últimos cobros.
 - **Exportar CSV** descarga la lista filtrada.
 
-> Los datos del cliente se editan desde la app. El panel solo consulta, para no
-> pisar cambios con la sincronización del celular.
+- **+ Cliente** y **Editar**: el administrador crea y edita clientes (contacto, vendedor,
+  diferencia de precio, días de visita, dispenser, activo). Avisa si ya existe uno parecido.
+- La **deuda no se edita**: la calculan las ventas y cobros de la app.
+- Para cambiar de vendedor a un cliente existente se usa **Transferir**.
+
+## Solicitudes
+
+Los vendedores piden clientes nuevos desde la app. En **Solicitudes** el administrador
+revisa, corrige y **aprueba** (el cliente queda a nombre de quien lo pidió) o **rechaza**
+con motivo. Requiere `sql/` parte A aplicada (`client_requests`).
 
 ## Productos y precios
 

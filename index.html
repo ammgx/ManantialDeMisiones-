@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.15</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.16</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -142,7 +142,7 @@ const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',D
 // El cambio inicial (lo que dejó el cierre anterior) y los ingresos de dinero suman al disponible.
 const avail=c=>(c.opening_cash_cents||0)+c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents+(c.total_income_cents||0)-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],usersAll:[],clients:[],cash_sessions:[],price_log:[],transfers:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
+let S={products:[],users:[],usersAll:[],clients:[],cash_sessions:[],price_log:[],transfers:[],requests:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
 let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
 let HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
 let CASH_DATA=new Map();   // id de caja -> {ss,pays,movs} ya cargado
@@ -178,19 +178,21 @@ async function paged(build,onPage){
 }
 
 async function load(){
-  const [p,u,c,pl,cs,tr]=await Promise.all([
+  const [p,u,c,pl,cs,tr,rq]=await Promise.all([
     paged(()=>sb.from('products').select('*')),
     paged(()=>sb.from('profiles').select('*')),
     paged(()=>sb.from('clients').select('*')),
     sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30),
     paged(()=>sb.from('cash_sessions').select('*')),
-    paged(()=>sb.from('client_transfers').select('*')).catch(()=>[])]);
+    paged(()=>sb.from('client_transfers').select('*')).catch(()=>[]),
+    paged(()=>sb.from('client_requests').select('*')).catch(()=>[])]);
   S.products=p.sort(byProdOrder);
   // Los usuarios ocultos (soporte) no se listan ni se editan en el panel.
   S.usersAll=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
   S.users=S.usersAll.filter(x=>!x.hidden);
   S.clients=c;
   S.cash_sessions=cs;
+  S.requests=rq;
   S.transfers=tr.sort((a,b)=>(b.created_at||0)-(a.created_at||0));
   S.price_log=ok(pl).map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
 }
@@ -218,13 +220,13 @@ $('#pw').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
 $('#out').onclick=async()=>{await sb.auth.signOut();ME=null;showLogin()};
 (async()=>{const {data}=await sb.auth.getSession();data.session?enter(data.session.user):showLogin()})();
 
-const TABS=[['home','Resumen'],['sales','Ventas'],['clients','Clientes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
+const TABS=[['home','Resumen'],['sales','Ventas'],['clients','Clientes'],['reqs','Solicitudes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
 const bind={};
 function render(){
-  $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?'on':''}" data-t="${k}">${l}</button>`).join('');
+  $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?'on':''}" data-t="${k}">${l}${k==='reqs'&&S.requests.some(r=>r.status==='PENDIENTE')?` (${S.requests.filter(r=>r.status==='PENDIENTE').length})`:''}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
-  $('#view').innerHTML=({home:vHome,sales:vSales,clients:vClients,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
-  bind[tab]&&bind[tab]();
+  $('#view').innerHTML=({home:vHome,sales:vSales,clients:vClients,reqs:vReqs,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
+  if(tab==='reqs')bindReqs();else bind[tab]&&bind[tab]();
   if(tab==='home'&&!HOME.ready&&!HOME.loading)loadHome();
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
@@ -439,7 +441,7 @@ function vClients(){
    <div class="card kpi"><small>Deuda total</small><b>${money(debt)}</b></div>
    <div class="card kpi"><small>Inactivos</small><b class="mu">${inactive}</b></div></div>
   <div class="card"><div class="row"><h2 style="flex:1;margin:0">Clientes</h2>
-   <button id="ccsv">Exportar CSV</button></div>
+   <button class="pri" id="cnew">+ Cliente</button><button id="ccsv">Exportar CSV</button></div>
    <div class="row">
     <input id="cq" placeholder="Buscar nombre, teléfono, dirección o zona" value="${esc(CLIF.q)}" style="flex:1;min-width:200px">
     <select id="cf" style="width:auto">
@@ -452,7 +454,7 @@ function vClients(){
     <select id="cm" style="width:auto"><option value="all">Todas las altas</option>${months.map(k=>`<option value="${k}" ${CLIF.month===k?'selected':''}>${monthLabel(k)}</option>`).join('')}</select>
    </div>
    <div id="clist"></div>
-   <p class="mu" style="font-size:12px;margin:6px 0 0">Los datos de contacto y la deuda se editan desde la app; acá se consultan y se pueden transferir de vendedor.</p>
+   <p class="mu" style="font-size:12px;margin:6px 0 0">Los clientes se crean y editan desde acá. La deuda la mueven las ventas y los cobros de la app, por eso no se edita. Los vendedores piden clientes nuevos desde la app (pestaña Solicitudes).</p>
   </div>
   <div class="card"><div class="row"><h2 style="flex:1;margin:0">Transferencias de clientes</h2><span class="mu" style="font-size:12px">${S.transfers.length} en total</span></div>
    <p class="mu" style="font-size:13px;margin-top:0">La ficha viaja con su deuda. Las ventas y los cobros quedan a nombre del vendedor original. Se bloquea si el vendedor actual tiene una caja abierta con movimientos.</p>
@@ -478,6 +480,7 @@ bind.clients=()=>{
   $('#cf').onchange=e=>{CLIF.f=e.target.value;fillClients()};
   $('#cu').onchange=e=>{CLIF.u=e.target.value;fillClients()};
   $('#cm').onchange=e=>{CLIF.month=e.target.value;fillClients()};
+  $('#cnew').onclick=()=>openClientForm();
   $('#ccsv').onclick=clientsCsv;
 };
 function clientsCsv(){
@@ -543,11 +546,105 @@ async function openClient(id){
     </details>
     <div class="row" style="margin-top:14px;justify-content:flex-end">
       ${wa?`<a href="${wa}" target="_blank" rel="noopener"><button type="button">WhatsApp</button></a>`:''}
+      <button id="ced">Editar</button>
       ${S.users.some(u=>u.active&&u.id!==c.created_by)?'<button id="trf">Transferir</button>':''}
       <button id="x">Cerrar</button></div>`;
     $('#x').onclick=()=>d.close();
     if($('#trf'))$('#trf').onclick=()=>openTransfer(c.id);
+    $('#ced').onclick=()=>openClientForm(c.id);
   }catch(e){d.close()}
+}
+
+/* ---- Clientes controlados por el administrador (v1.16) ---- */
+const DAYS=[['Lun',1],['Mar',2],['Mié',4],['Jue',8],['Vie',16],['Sáb',32],['Dom',64]];
+const centsOf=v=>{let t=String(v||'').trim().replace(/\s/g,'');if(!t)return 0;
+  t=t.includes(',')?t.replace(/\./g,'').replace(',','.'):t;
+  const n=Number(t);return Number.isFinite(n)?Math.round(n*100):NaN};
+const digits=v=>String(v||'').replace(/\D/g,'');
+/** Alta, edición o aprobación de solicitud. La deuda nunca se edita acá. */
+function openClientForm(id,req){
+  const c=id?S.clients.find(x=>x.id===id):null;
+  const src=c||req||{};
+  const sellers=S.users.filter(u=>u.active).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
+  const owner=c?c.created_by:(req?req.requested_by:'');
+  const days=src.visit_days||0;
+  const diff=String((src.price_diff_cents||0)/100).replace('.',',');
+  const d=$('#dlg');
+  const ownerField=c
+    ?`<p class="mu" style="margin:0">Vendedor: <b>${esc(nameOf(c.created_by))}</b> (para cambiarlo usá Transferir)</p>`
+    :`<label>Vendedor</label><select id="f_u">${sellers.map(u=>`<option value="${u.id}" ${u.id===owner?'selected':''}>${esc(u.name)}${u.role==='ADMIN'?' (administrador)':''}</option>`).join('')}</select>`;
+  d.innerHTML=`<h2>${c?'Editar cliente':req?'Aprobar solicitud':'Nuevo cliente'}</h2>
+   ${req?`<p class="mu" style="margin-top:0">Pedido por <b>${esc(nameOf(req.requested_by))}</b>. Revisá y corregí los datos antes de aprobar.</p>`:''}
+   <label>Nombre</label><input id="f_n" value="${esc(src.name)}">
+   <label>Teléfono</label><input id="f_p" inputmode="tel" value="${esc(src.phone)}">
+   <label>Dirección</label><input id="f_a" value="${esc(src.address)}">
+   <label>Localidad / zona</label><input id="f_l" value="${esc(src.localidad)}">
+   <label>Referencia</label><input id="f_r" value="${esc(src.reference)}">
+   <label>Descripción</label><input id="f_d" value="${esc(src.description)}">
+   ${ownerField}
+   <label>Diferencia de precio en $ (negativo resta)</label><input id="f_x" inputmode="decimal" value="${diff}">
+   <label>Días de visita</label>
+   <div class="row">${DAYS.map(([l,b])=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" class="f_v" value="${b}" ${days&b?'checked':''} style="width:auto">${l}</label>`).join('')}</div>
+   <div class="row">
+    <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="f_s" ${src.has_dispenser?'checked':''} style="width:auto">Tiene dispenser</label>
+    <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="f_t" ${(c?c.active:true)?'checked':''} style="width:auto">Activo</label></div>
+   ${c?`<p class="mu" style="font-size:13px">Deuda actual: <b>${money(c.pending_amount)}</b> (la calculan las ventas y cobros)</p>`:''}
+   <p id="ferr" class="bad hide" style="font-size:13px"></p>
+   <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button>${req?'<button id="rj">Rechazar</button>':''}<button class="pri" id="sv">${req?'Aprobar':'Guardar'}</button></div>`;
+  const fail=m=>{const e=$('#ferr');e.textContent=m;e.classList.remove('hide')};
+  $('#x').onclick=()=>d.close();
+  if(req)$('#rj').onclick=async()=>{
+    const why=prompt('Motivo del rechazo (opcional)');if(why===null)return;
+    try{ok(await sb.rpc('reject_client_request',{p_request_id:req.id,p_reason:why.trim()}));
+      req.status='RECHAZADA';req.reject_reason=why.trim();d.close();render()}catch(e){fail('No se pudo rechazar: '+((e&&e.message)||e))}};
+  $('#sv').onclick=async()=>{
+    const name=$('#f_n').value.trim();
+    if(!name)return fail('El nombre es obligatorio.');
+    const diffC=centsOf($('#f_x').value);
+    if(Number.isNaN(diffC))return fail('La diferencia de precio no es un número válido.');
+    const ph=digits($('#f_p').value);
+    const dup=S.clients.find(x=>x.id!==id&&(x.name||'').trim().toLowerCase()===name.toLowerCase()||(ph.length>=6&&x.id!==id&&digits(x.phone)===ph));
+    if(dup&&!confirm('Ya existe un cliente parecido: '+dup.name+' (vendedor: '+nameOf(dup.created_by)+'). ¿Guardar igual?'))return;
+    const row={name,phone:$('#f_p').value.trim(),address:$('#f_a').value.trim(),localidad:$('#f_l').value.trim(),
+      reference:$('#f_r').value.trim(),description:$('#f_d').value.trim(),has_dispenser:$('#f_s').checked,
+      active:$('#f_t').checked,price_diff_cents:diffC,
+      visit_days:[...document.querySelectorAll('.f_v:checked')].reduce((a,e)=>a+Number(e.value),0)};
+    const btn=$('#sv');btn.disabled=true;
+    try{
+      if(c){ok(await sb.from('clients').update(row).eq('id',c.id).select().single());Object.assign(c,row)}
+      else if(req){
+        const r=ok(await sb.rpc('approve_client_request',{p_request_id:req.id,p_name:row.name,p_address:row.address,
+          p_phone:row.phone,p_localidad:row.localidad,p_reference:row.reference,p_description:row.description,
+          p_has_dispenser:row.has_dispenser,p_price_diff_cents:row.price_diff_cents,p_visit_days:row.visit_days,
+          p_active:row.active,p_owner:$('#f_u').value}));
+        const nc=Array.isArray(r)?r[0]:r;S.clients.push(nc);req.status='APROBADA';req.client_id=nc.id}
+      else{S.clients.push(ok(await sb.from('clients').insert({...row,created_by:$('#f_u').value}).select().single()))}
+      d.close();render();
+    }catch(e){fail('No se pudo guardar: '+((e&&e.message)||e));btn.disabled=false}
+  };
+  if(!d.open)d.showModal();
+}
+function vReqs(){
+  const pend=S.requests.filter(r=>r.status==='PENDIENTE').sort((a,b)=>a.created_at-b.created_at);
+  const done=S.requests.filter(r=>r.status!=='PENDIENTE').sort((a,b)=>(b.reviewed_at||b.created_at)-(a.reviewed_at||a.created_at)).slice(0,50);
+  const similar=r=>S.clients.some(c=>(c.name||'').trim().toLowerCase()===r.name.trim().toLowerCase()||(digits(r.phone).length>=6&&digits(c.phone)===digits(r.phone)));
+  const tag=s=>`<span class="tag ${s==='APROBADA'?'ok':s==='RECHAZADA'?'bad':'mu'}">${s==='APROBADA'?'Aprobada':s==='RECHAZADA'?'Rechazada':'Cancelada'}</span>`;
+  const t1=pend.length?`<div class="tw"><table><thead><tr><th>Fecha</th><th>Cliente</th><th class="hide-sm">Pidió</th><th></th></tr></thead><tbody>
+   ${pend.map(r=>`<tr><td>${fdt(r.created_at)}</td><td><b>${esc(r.name)}</b>${similar(r)?' <span class="tag warn">¿Ya existe?</span>':''}${r.localidad?`<br><span class="mu">${esc(r.localidad)}</span>`:''}</td><td class="hide-sm">${esc(nameOf(r.requested_by))}</td><td><button class="sm" data-rid="${r.id}">Revisar</button></td></tr>`).join('')}
+   </tbody></table></div>`:'<p class="mu">No hay solicitudes pendientes.</p>';
+  const t2=done.length?`<div class="tw"><table><thead><tr><th>Fecha</th><th>Cliente</th><th class="hide-sm">Pidió</th><th>Estado</th><th class="hide-sm">Motivo</th></tr></thead><tbody>
+   ${done.map(r=>`<tr><td>${fdt(r.reviewed_at||r.created_at)}</td><td>${esc(r.name)}</td><td class="hide-sm">${esc(nameOf(r.requested_by))}</td><td>${tag(r.status)}</td><td class="hide-sm mu">${esc(r.reject_reason)||'—'}</td></tr>`).join('')}
+   </tbody></table></div>`:'<p class="mu">Todavía no hay solicitudes resueltas.</p>';
+  return `<div class="card"><div class="row"><h2 style="flex:1;margin:0">Solicitudes de clientes</h2><button id="rrel">Actualizar</button></div>
+   <p class="mu" style="font-size:13px;margin-top:0">Los vendedores proponen clientes desde la app. Revisá, corregí y aprobá: el cliente queda a nombre de quien lo pidió.</p>${t1}</div>
+  <div class="card"><h2>Resueltas</h2>${t2}</div>`;
+}
+function bindReqs(){
+  document.querySelectorAll('[data-rid]').forEach(b=>b.onclick=()=>{
+    const r=S.requests.find(x=>x.id===b.dataset.rid);if(r)openClientForm(null,r)});
+  const rl=$('#rrel');if(rl)rl.onclick=async()=>{
+    rl.disabled=true;try{S.requests=await paged(()=>sb.from('client_requests').select('*'));
+      S.clients=await paged(()=>sb.from('clients').select('*'))}finally{render()}};
 }
 /**
  * Transfiere la ficha (con su deuda) a otro usuario.
