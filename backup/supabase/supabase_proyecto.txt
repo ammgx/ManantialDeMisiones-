@@ -1,0 +1,8 @@
+Proyecto: caja agua manantial
+Ref: hjghvofqstmcnzccgasd
+Región: us-east-1
+Estado: ACTIVE_HEALTHY
+Creado: 2026-10-24T04:24:17.157384Z
+Base de datos: 17.11.0.003
+Host: db.hjghvofqstmcnzccgasd.supabase.co
+Claves: anon y publishable guardadas; service_role y secret NO guardadas.
