@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.16</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.17</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -441,7 +441,7 @@ function vClients(){
    <div class="card kpi"><small>Deuda total</small><b>${money(debt)}</b></div>
    <div class="card kpi"><small>Inactivos</small><b class="mu">${inactive}</b></div></div>
   <div class="card"><div class="row"><h2 style="flex:1;margin:0">Clientes</h2>
-   <button class="pri" id="cnew">+ Cliente</button><button id="ccsv">Exportar CSV</button></div>
+   <button class="pri" id="cnew">+ Cliente</button><button id="cimp">Importar CSV</button><button id="ccsv">Exportar CSV</button></div>
    <div class="row">
     <input id="cq" placeholder="Buscar nombre, teléfono, dirección o zona" value="${esc(CLIF.q)}" style="flex:1;min-width:200px">
     <select id="cf" style="width:auto">
@@ -454,7 +454,7 @@ function vClients(){
     <select id="cm" style="width:auto"><option value="all">Todas las altas</option>${months.map(k=>`<option value="${k}" ${CLIF.month===k?'selected':''}>${monthLabel(k)}</option>`).join('')}</select>
    </div>
    <div id="clist"></div>
-   <p class="mu" style="font-size:12px;margin:6px 0 0">Los clientes se crean y editan desde acá. La deuda la mueven las ventas y los cobros de la app, por eso no se edita. Los vendedores piden clientes nuevos desde la app (pestaña Solicitudes).</p>
+   <p class="mu" style="font-size:12px;margin:6px 0 0">Los clientes se crean y editan desde acá. La deuda la mueven las ventas y los cobros de la app, por eso no se edita. Los vendedores piden clientes nuevos desde la app (pestaña Solicitudes). Importar CSV usa las mismas columnas que Exportar CSV: solo «nombre» es obligatoria y podés sumar «dias» (por ejemplo Lun;Jue).</p>
   </div>
   <div class="card"><div class="row"><h2 style="flex:1;margin:0">Transferencias de clientes</h2><span class="mu" style="font-size:12px">${S.transfers.length} en total</span></div>
    <p class="mu" style="font-size:13px;margin-top:0">La ficha viaja con su deuda. Las ventas y los cobros quedan a nombre del vendedor original. Se bloquea si el vendedor actual tiene una caja abierta con movimientos.</p>
@@ -481,6 +481,7 @@ bind.clients=()=>{
   $('#cu').onchange=e=>{CLIF.u=e.target.value;fillClients()};
   $('#cm').onchange=e=>{CLIF.month=e.target.value;fillClients()};
   $('#cnew').onclick=()=>openClientForm();
+  $('#cimp').onclick=openImport;
   $('#ccsv').onclick=clientsCsv;
 };
 function clientsCsv(){
@@ -645,6 +646,84 @@ function bindReqs(){
   const rl=$('#rrel');if(rl)rl.onclick=async()=>{
     rl.disabled=true;try{S.requests=await paged(()=>sb.from('client_requests').select('*'));
       S.clients=await paged(()=>sb.from('clients').select('*'))}finally{render()}};
+}
+
+/* ---- Importación de clientes por CSV (v1.17) ---- */
+function parseCsv(text){
+  text=text.replace(/^\ufeff/,'');
+  const first=text.split(/\r?\n/)[0]||'';
+  const sep=(first.match(/;/g)||[]).length>(first.match(/,/g)||[]).length?';':',';
+  const rows=[];let row=[],cur='',q=false;
+  const endRow=()=>{row.push(cur);cur='';if(row.some(x=>x.trim()!==''))rows.push(row);row=[]};
+  for(let i=0;i<text.length;i++){const ch=text[i];
+    if(q){if(ch==='"'){if(text[i+1]==='"'){cur+='"';i++}else q=false}else cur+=ch}
+    else if(ch==='"')q=true;
+    else if(ch===sep){row.push(cur);cur=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&text[i+1]==='\n')i++;endRow()}
+    else cur+=ch}
+  endRow();
+  return rows;
+}
+const norm=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function daysMask(v){const t=norm(v);if(!t)return 0;
+  if(/^\d+$/.test(t))return Math.min(127,Number(t));
+  return DAYS.reduce((a,[l,b])=>a+(t.includes(norm(l))?b:0),0)}
+function openImport(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.csv,text/csv,text/plain';
+  inp.onchange=async()=>{const f=inp.files[0];if(!f)return;
+    try{showImport(parseCsv(await f.text()),f.name)}catch(e){alert('No se pudo leer el archivo: '+((e&&e.message)||e))}};
+  inp.click();
+}
+function showImport(rows,fname){
+  if(rows.length<2)return alert('El archivo no tiene datos: hacen falta los encabezados y al menos una fila.');
+  const hd=rows[0].map(norm),col=n=>hd.indexOf(n);
+  const ix={name:col('nombre'),phone:col('telefono'),addr:col('direccion'),loc:col('localidad'),ref:col('referencia'),
+    desc:col('descripcion'),seller:col('vendedor'),act:col('activo'),disp:col('dispensador'),diff:col('ajuste_precio'),days:col('dias')};
+  if(ix.name<0)return alert('Falta la columna «nombre» en la primera fila.');
+  const g=(r,i)=>i<0?'':String(r[i]??'').trim();
+  const yes=v=>['si','s','1','true','x','yes'].includes(norm(v));
+  const sellers=S.users.filter(u=>u.active);
+  if(!sellers.length)return alert('No hay vendedores activos para asignar los clientes.');
+  const seen=new Set(S.clients.map(c=>norm(c.name)));
+  const seenPh=new Set(S.clients.map(c=>digits(c.phone)).filter(p=>p.length>=6));
+  const good=[],dups=[],bad=[];
+  rows.slice(1).forEach((r,n)=>{
+    const name=g(r,ix.name);if(!name){bad.push(n+2);return}
+    const ph=digits(g(r,ix.phone));
+    if(seen.has(norm(name))||(ph.length>=6&&seenPh.has(ph))){dups.push(name);return}
+    const diffC=centsOf(g(r,ix.diff));if(Number.isNaN(diffC)){bad.push(n+2);return}
+    seen.add(norm(name));if(ph.length>=6)seenPh.add(ph);
+    const sv=sellers.find(u=>norm(u.name)===norm(g(r,ix.seller)));
+    good.push({name,phone:g(r,ix.phone),address:g(r,ix.addr),localidad:g(r,ix.loc),reference:g(r,ix.ref),
+      description:g(r,ix.desc),has_dispenser:ix.disp>=0&&yes(g(r,ix.disp)),
+      active:ix.act<0||g(r,ix.act)===''||yes(g(r,ix.act)),price_diff_cents:diffC,visit_days:daysMask(g(r,ix.days)),
+      _seller:sv?sv.id:''});
+  });
+  const noSeller=good.filter(x=>!x._seller).length;
+  const d=$('#dlg');
+  d.innerHTML=`<h2>Importar clientes</h2><p class="mu" style="margin-top:0">${esc(fname)}</p>
+   <p><b>${good.length}</b> para importar · <b>${dups.length}</b> omitidos (ya existen) · <b>${bad.length}</b> filas inválidas${bad.length?` (filas ${bad.slice(0,10).join(', ')}${bad.length>10?'…':''})`:''}</p>
+   ${noSeller?`<p class="mu" style="font-size:13px">${noSeller} cliente(s) no traen un vendedor válido: se asignan al que elijas acá.</p>`:''}
+   <label>Vendedor por defecto</label><select id="i_u">${sellers.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('')}</select>
+   <p class="mu" style="font-size:13px">La deuda no se importa: todos los clientes empiezan en $0.</p>
+   <p id="ierr" class="bad hide" style="font-size:13px"></p>
+   <div class="row" style="margin-top:14px;justify-content:flex-end"><button id="x">Cancelar</button><button class="pri" id="sv" ${good.length?'':'disabled'}>Importar ${good.length}</button></div>`;
+  $('#x').onclick=()=>d.close();
+  $('#sv').onclick=async()=>{
+    const def=$('#i_u').value,btn=$('#sv');btn.disabled=true;btn.textContent='Importando…';
+    const payload=good.map(({_seller,...r})=>({...r,created_by:_seller||def}));
+    let done=0;
+    try{
+      for(let i=0;i<payload.length;i+=100){
+        const res=ok(await sb.from('clients').insert(payload.slice(i,i+100)).select());
+        S.clients.push(...res);done+=res.length}
+      d.close();render();alert(done+' clientes importados.');
+    }catch(e){
+      const m=$('#ierr');m.textContent='Se importaron '+done+' de '+payload.length+'. Error: '+((e&&e.message)||e);m.classList.remove('hide');
+      btn.textContent='Reintentar';btn.disabled=true;render();
+    }
+  };
+  if(!d.open)d.showModal();
 }
 /**
  * Transfiere la ficha (con su deuda) a otro usuario.

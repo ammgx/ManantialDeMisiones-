@@ -67,6 +67,7 @@ Es la pantalla de trabajo: entrás y ves qué falta hacer.
 
 - **+ Cliente** y **Editar**: el administrador crea y edita clientes (contacto, vendedor,
   diferencia de precio, días de visita, dispenser, activo). Avisa si ya existe uno parecido.
+- **Importar CSV**: usa las mismas columnas que Exportar CSV (`nombre` obligatoria; opcionales `telefono, direccion, localidad, referencia, descripcion, vendedor, activo, dispensador, ajuste_precio, dias`). Acepta `,` o `;`. Omite los que ya existen (mismo nombre o teléfono) y no importa deuda.
 - La **deuda no se edita**: la calculan las ventas y cobros de la app.
 - Para cambiar de vendedor a un cliente existente se usa **Transferir**.
 
