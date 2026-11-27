@@ -9,6 +9,7 @@ https://ammgx.github.io/ManantialDeMisiones-/
 - **Resumen:** centro de trabajo con pendientes, cajas abiertas y cajas cerradas desplegables.
 - **Ventas:** todas las ventas con filtros por mes, vendedor, medio y texto; totales, fiado, cobros, detalle y ranking de productos.
 - **Clientes:** buscador, deuda, ficha con historial de ventas y cobros, exportación CSV.
+- **Bidones:** saldo de envases retornables por cliente y tamaño, ajustes del administrador y pestaña con totales y exportación CSV.
 - **Cierres de caja:** agrupados por mes, con filtros por usuario y estado, revisión, arqueo y exportación CSV.
 - **Precios:** productos, precios, orden manual e historial de cambios.
 - **Usuarios:** listado del equipo, cambio de nombre, rol y estado, y restablecer contraseñas.
@@ -70,6 +71,32 @@ Es la pantalla de trabajo: entrás y ves qué falta hacer.
 - **Importar CSV**: usa las mismas columnas que Exportar CSV (`nombre` obligatoria; opcionales `telefono, direccion, localidad, referencia, descripcion, vendedor, activo, dispensador, ajuste_precio, dias`). Acepta `,` o `;`. Omite los que ya existen (mismo nombre o teléfono) y no importa deuda.
 - La **deuda no se edita**: la calculan las ventas y cobros de la app.
 - Para cambiar de vendedor a un cliente existente se usa **Transferir**.
+- La columna **Bidones** resume el saldo (por ejemplo, «2 × 20 L») y el
+  **Exportar CSV** incluye la columna `bidones` al final. La importación no la usa.
+
+## Bidones
+
+El panel muestra los bidones retornables que cada cliente tiene en su poder.
+El **saldo** se calcula por tamaño sumando las entregas y restando las
+devoluciones registradas desde la app (los cambios no modifican el saldo).
+Se muestra como «2 × 20 L»; si hay varios tamaños, se listan separados.
+Los saldos negativos se resaltan en rojo: significan que devolvió más bidones
+de los que le entregaron y hay que revisarlos. No se descuentan de los
+bidones en la calle.
+
+- **Ficha del cliente:** sección **Bidones** con el saldo y el historial de
+  movimientos (fecha, vendedor, tipo, cantidad, litros y nota). Los movimientos
+  no se editan ni se borran.
+- **Ajuste del administrador:** solo lo ve el administrador. Permite sumar o
+  restar bidones de un tamaño, con cantidad y **nota obligatoria**. Guarda un
+  movimiento `AJUSTE` que corrige el saldo y llega a la app en la próxima
+  sincronización.
+- **Pestaña Bidones:** tarjetas con los bidones en la calle por tamaño, los
+  saldos a revisar y los totales por vendedor (el vendedor es el dueño de la
+  ficha del cliente). La tabla lista solo los clientes con saldo distinto de 0,
+  ordenada por saldo descendente (se puede invertir), con filtro por vendedor.
+- **Exportar CSV** de esa pestaña descarga la lista filtrada con columnas
+  `cliente,vendedor,bidones,detalle` (el detalle desglosa el saldo por tamaño).
 
 ## Solicitudes
 
@@ -162,5 +189,5 @@ No hace falta instalar nada: se abre en el navegador del teléfono.
 2. Subir el cambio a `main`.
 3. GitHub Pages lo publica solo en un par de minutos.
 
-Mantener el número de versión visible en la cabecera (`v1.11`) para confirmar qué
+Mantener el número de versión visible en la cabecera (`v1.18`) para confirmar qué
 versión está publicada.

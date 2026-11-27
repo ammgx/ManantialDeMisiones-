@@ -124,7 +124,7 @@ details.mg table{min-width:660px}
 <div class="row" style="margin-top:12px"><button class="pri" id="go" style="flex:1">Ingresar</button></div>
 </div></div>
 <div id="app" class="hide">
-<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.17</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
+<header><div class="brand"><img src="logo.png" alt="Aguas Misiones"><h1>Manantial de Misiones · Panel</h1></div><span id="ver" class="mu" style="font-size:12px">v1.18</span><span id="me" style="font-size:13px"></span><button id="out">Salir</button></header>
 <nav id="nav"></nav><main id="view"></main>
 </div>
 <dialog id="dlg"></dialog>
@@ -142,7 +142,7 @@ const PAY={EFECTIVO:'Efectivo',TRANSFERENCIA:'Transferencia',TARJETA:'Tarjeta',D
 // El cambio inicial (lo que dejó el cierre anterior) y los ingresos de dinero suman al disponible.
 const avail=c=>(c.opening_cash_cents||0)+c.total_cash_cents+c.total_transfer_cents+c.total_debit_cents+(c.total_income_cents||0)-(c.total_expenses_cents||0);
 const declDiff=c=>(c.counted_cents||0)-avail(c);
-let S={products:[],users:[],usersAll:[],clients:[],cash_sessions:[],price_log:[],transfers:[],requests:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false};
+let S={products:[],users:[],usersAll:[],clients:[],cash_sessions:[],price_log:[],transfers:[],requests:[],containers:[]},ME=null,tab='home',A=null,CASHF={u:'',st:'',diff:false},CLIF={q:'',f:'all',u:'',month:'all'},SALF={month:'all',user:'',pay:'',q:'',voided:false},BIDF={u:'',desc:true};
 let SALES={loaded:false,loading:false,error:null,sales:[],items:[],pays:[]};
 let HOME={ready:false,loading:false,error:null,at:0,by:new Map()};
 let CASH_DATA=new Map();   // id de caja -> {ss,pays,movs} ya cargado
@@ -178,14 +178,15 @@ async function paged(build,onPage){
 }
 
 async function load(){
-  const [p,u,c,pl,cs,tr,rq]=await Promise.all([
+  const [p,u,c,pl,cs,tr,rq,ct]=await Promise.all([
     paged(()=>sb.from('products').select('*')),
     paged(()=>sb.from('profiles').select('*')),
     paged(()=>sb.from('clients').select('*')),
     sb.from('price_log').select('*').order('changed_at',{ascending:false}).limit(30),
     paged(()=>sb.from('cash_sessions').select('*')),
     paged(()=>sb.from('client_transfers').select('*')).catch(()=>[]),
-    paged(()=>sb.from('client_requests').select('*')).catch(()=>[])]);
+    paged(()=>sb.from('client_requests').select('*')).catch(()=>[]),
+    paged(()=>sb.from('container_movements').select('*')).catch(()=>[])]);
   S.products=p.sort(byProdOrder);
   // Los usuarios ocultos (soporte) no se listan ni se editan en el panel.
   S.usersAll=u.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'es'));
@@ -193,6 +194,7 @@ async function load(){
   S.clients=c;
   S.cash_sessions=cs;
   S.requests=rq;
+  S.containers=ct;
   S.transfers=tr.sort((a,b)=>(b.created_at||0)-(a.created_at||0));
   S.price_log=ok(pl).map(l=>({at:l.changed_at,name:l.product_name,from:l.old_cents,to:l.new_cents}));
 }
@@ -220,18 +222,52 @@ $('#pw').onkeydown=e=>{if(e.key==='Enter')$('#go').click()};
 $('#out').onclick=async()=>{await sb.auth.signOut();ME=null;showLogin()};
 (async()=>{const {data}=await sb.auth.getSession();data.session?enter(data.session.user):showLogin()})();
 
-const TABS=[['home','Resumen'],['sales','Ventas'],['clients','Clientes'],['reqs','Solicitudes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
+const TABS=[['home','Resumen'],['sales','Ventas'],['clients','Clientes'],['bidones','Bidones'],['reqs','Solicitudes'],['cash','Cierres de caja'],['prices','Precios'],['users','Usuarios'],['acct','Cuenta'],['archive','Archivo']];
 const bind={};
 function render(){
   $('#nav').innerHTML=TABS.map(([k,l])=>`<button class="${k==tab?'on':''}" data-t="${k}">${l}${k==='reqs'&&S.requests.some(r=>r.status==='PENDIENTE')?` (${S.requests.filter(r=>r.status==='PENDIENTE').length})`:''}</button>`).join('');
   $('#nav').querySelectorAll('button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
-  $('#view').innerHTML=({home:vHome,sales:vSales,clients:vClients,reqs:vReqs,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
+  $('#view').innerHTML=({home:vHome,sales:vSales,clients:vClients,bidones:vBidones,reqs:vReqs,cash:vCash,archive:vArchive,prices:vPrices,users:vUsers,acct:vAcct})[tab]();
   if(tab==='reqs')bindReqs();else bind[tab]&&bind[tab]();
   if(tab==='home'&&!HOME.ready&&!HOME.loading)loadHome();
 }
 const closed=()=>S.cash_sessions.filter(c=>c.is_closed).sort((a,b)=>b.closed_at-a.closed_at);
 const byProdOrder=(a,b)=>(Number(a.sort_order??0)-Number(b.sort_order??0))||String(a.name||'').localeCompare(String(b.name||''),'es');
 const nameOf=id=>(S.usersAll||S.users||[]).find(u=>u.id===id)?.name||'—';
+
+/* ---- Bidones retornables: saldos derivados de S.containers ---- */
+const CTYPES={ENTREGA:'Entrega',DEVOLUCION:'Devolución',CAMBIO:'Cambio',AJUSTE:'Ajuste'};
+let BAL_CACHE={src:null,by:new Map()};
+// Saldo por cliente y tamaño = entregas - devoluciones. Los saldos en 0 se omiten
+// y los negativos se conservan (hay que revisarlos, no se descuentan de los positivos).
+function balances(clientId){
+  if(BAL_CACHE.src!==S.containers){
+    const acc=new Map();
+    for(const m of S.containers||[]){
+      const id=m.client_id,l=Number(m.liters);
+      if(!id||!Number.isInteger(l)||l<1)continue;
+      if(!acc.has(id))acc.set(id,new Map());
+      const sizes=acc.get(id);
+      const n=(Number(m.delivered)||0)-(Number(m.returned)||0);
+      sizes.set(l,(sizes.get(l)||0)+n);
+    }
+    const by=new Map();
+    for(const [id,sizes] of acc){
+      const b={};
+      for(const [l,n] of sizes)if(n!==0)b[l]=n;
+      if(Object.keys(b).length)by.set(id,b);
+    }
+    BAL_CACHE={src:S.containers,by};
+  }
+  return BAL_CACHE.by.get(clientId)||{};
+}
+const balItem=(n,l)=>`${n<0?'−'+Math.abs(n):n} × ${Number(l)} L`;
+const balSort=([a],[b])=>Number(a)-Number(b);
+const balText=b=>Object.entries(b||{}).sort(balSort).map(([l,n])=>balItem(n,l)).join(' · ')||'—';
+const balHtml=b=>Object.entries(b||{}).sort(balSort)
+  .map(([l,n])=>`<span class="${n<0?'bad':''}">${esc(balItem(n,l))}</span>`).join(' · ')||'<span class="mu">—</span>';
+const balTotal=b=>Object.values(b||{}).reduce((a,n)=>a+n,0);
+const hasBal=b=>Object.keys(b||{}).length>0;
 
 function vHome(){
   const op=S.cash_sessions.filter(c=>!c.is_closed).sort((a,b)=>a.opened_at-b.opened_at);
@@ -463,14 +499,15 @@ function vClients(){
 function fillClients(){
   const all=filteredClients(),list=all.slice(0,200);
   $('#clist').innerHTML=`<p class="mu" style="margin:0 0 6px;font-size:13px">${all.length} ${all.length==1?'cliente':'clientes'}${all.length>list.length?` · mostrando los primeros ${list.length}`:''}</p>
-   <div class="tw"><table><thead><tr><th>Cliente</th><th class="hide-sm">Teléfono</th><th class="hide-sm">Vendedor</th><th class="r">Deuda</th><th>Estado</th><th></th></tr></thead><tbody>
+   <div class="tw"><table><thead><tr><th>Cliente</th><th class="hide-sm">Teléfono</th><th class="hide-sm">Vendedor</th><th class="r">Deuda</th><th class="hide-sm">Bidones</th><th>Estado</th><th></th></tr></thead><tbody>
    ${list.map(c=>`<tr>
     <td><b>${esc(c.name)}</b>${c.localidad?`<br><span class="mu">${esc(c.localidad)}</span>`:''}</td>
     <td class="hide-sm">${esc(c.phone)||'—'}</td>
     <td class="hide-sm">${esc(nameOf(c.created_by))}</td>
     <td class="r ${c.pending_amount>0?'warn':''}"><b>${money(c.pending_amount)}</b></td>
+    <td class="hide-sm">${balHtml(balances(c.id))}</td>
     <td>${c.active?'<span class="tag ok">Activo</span>':'<span class="tag mu">Baja</span>'}</td>
-    <td><button class="sm" data-cid="${c.id}">Ver</button></td></tr>`).join('')||'<tr><td colspan="6" class="mu">Sin resultados.</td></tr>'}
+    <td><button class="sm" data-cid="${c.id}">Ver</button></td></tr>`).join('')||'<tr><td colspan="7" class="mu">Sin resultados.</td></tr>'}
    </tbody></table></div>`;
   $('#clist').querySelectorAll('button[data-cid]').forEach(b=>b.onclick=()=>openClient(b.dataset.cid));
 }
@@ -487,10 +524,89 @@ bind.clients=()=>{
 function clientsCsv(){
   const list=filteredClients();
   if(!list.length)return alert('No hay clientes para los filtros elegidos.');
-  const h=['nombre','telefono','direccion','localidad','referencia','descripcion','vendedor','deuda','activo','dispensador','ajuste_precio'];
+  const h=['nombre','telefono','direccion','localidad','referencia','descripcion','vendedor','deuda','activo','dispensador','ajuste_precio','bidones'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=list.map(c=>[c.name,c.phone,c.address,c.localidad,c.reference,c.description,nameOf(c.created_by),(c.pending_amount||0)/100,c.active?'SI':'NO',c.has_dispenser?'SI':'NO',(c.price_diff_cents||0)/100].map(q).join(','));
+  const rows=list.map(c=>[c.name,c.phone,c.address,c.localidad,c.reference,c.description,nameOf(c.created_by),(c.pending_amount||0)/100,c.active?'SI':'NO',c.has_dispenser?'SI':'NO',(c.price_diff_cents||0)/100,balText(balances(c.id))].map(q).join(','));
   dl('clientes-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
+}
+
+/* ---- Bidones retornables: totales, tabla y CSV (v1.18) ---- */
+function bidonesTotals(){
+  const street=new Map(),review=new Map(),bySeller=new Map();
+  for(const c of S.clients){
+    const b=balances(c.id);
+    if(!hasBal(b))continue;
+    const seller=c.created_by||'';
+    if(!bySeller.has(seller))bySeller.set(seller,{street:new Map(),review:new Map()});
+    for(const [l,n] of Object.entries(b)){
+      const size=Number(l),qty=Math.abs(n),bucket=n>0?'street':'review';
+      const all=bucket==='street'?street:review;
+      all.set(size,(all.get(size)||0)+qty);
+      const one=bySeller.get(seller)[bucket];
+      one.set(size,(one.get(size)||0)+qty);
+    }
+  }
+  return {street,review,bySeller};
+}
+const mapBal=m=>Object.fromEntries([...m.entries()].sort((a,b)=>a[0]-b[0]));
+function bidonesRows(){
+  const dir=BIDF.desc?-1:1;
+  return S.clients.filter(c=>hasBal(balances(c.id)))
+    .filter(c=>!BIDF.u||c.created_by===BIDF.u)
+    .sort((a,b)=>dir*(balTotal(balances(a.id))-balTotal(balances(b.id)))
+      ||String(a.name||'').localeCompare(String(b.name||''),'es'));
+}
+function vBidones(){
+  const tot=bidonesTotals();
+  const uids=[...new Set(S.clients.map(c=>c.created_by).filter(Boolean))]
+    .map(id=>({id,name:nameOf(id)})).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  if(BIDF.u&&!uids.some(u=>u.id===BIDF.u))BIDF.u='';
+  const sellers=[...tot.bySeller.entries()].map(([id,v])=>({id,name:nameOf(id),...v}))
+    .sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  const sellerRows=sellers.map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${balHtml(mapBal(s.street))}</td><td>${balHtml(mapBal(s.review))}</td></tr>`).join('')||'<tr><td colspan="3" class="mu">Sin movimientos de bidones.</td></tr>';
+  return `<div class="grid">
+    <div class="card kpi"><small>Bidones en la calle</small><b>${esc(balText(mapBal(tot.street)))}</b></div>
+    <div class="card kpi"><small>A revisar (devoluciones de más)</small><b class="${tot.review.size?'bad':''}">${esc(balText(mapBal(tot.review)))}</b></div>
+    <div class="card kpi"><small>Clientes con saldo</small><b>${S.clients.filter(c=>hasBal(balances(c.id))).length}</b></div>
+  </div>
+  <div class="card"><h2>Totales por vendedor</h2>
+    <div class="tw"><table><thead><tr><th>Vendedor</th><th>En la calle</th><th>A revisar</th></tr></thead><tbody>${sellerRows}</tbody></table></div>
+    <p class="mu" style="font-size:12px;margin:6px 0 0">Los saldos negativos se cuentan aparte: no se restan de los bidones en la calle.</p>
+  </div>
+  <div class="card"><div class="row"><h2 style="flex:1;margin:0">Clientes con bidones</h2>
+    <button id="bdcsv">Exportar CSV</button></div>
+    <div class="row">
+      <select id="bdu" style="width:auto"><option value="">Todos los vendedores</option>${uids.map(u=>`<option value="${esc(u.id)}" ${BIDF.u===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+      <select id="bdord" style="width:auto"><option value="desc" ${BIDF.desc?'selected':''}>Mayor saldo primero</option><option value="asc" ${BIDF.desc?'':'selected'}>Menor saldo primero</option></select>
+    </div>
+    <div id="bdlist"></div>
+  </div>`;
+}
+function fillBidones(){
+  const list=bidonesRows();
+  $('#bdlist').innerHTML=`<p class="mu" style="margin:0 0 6px;font-size:13px">${list.length} ${list.length===1?'cliente':'clientes'} con saldo distinto de 0.</p>
+    <div class="tw"><table><thead><tr><th>Cliente</th><th>Vendedor</th><th class="r">Saldo</th></tr></thead><tbody>
+    ${list.map(c=>`<tr><td><button class="sm" data-bid="${esc(c.id)}">${esc(c.name)}</button></td><td>${esc(nameOf(c.created_by))}</td><td class="r">${balHtml(balances(c.id))}</td></tr>`).join('')||'<tr><td colspan="3" class="mu">Sin clientes con bidones para este filtro.</td></tr>'}
+    </tbody></table></div>`;
+  $('#bdlist').querySelectorAll('button[data-bid]').forEach(b=>b.onclick=()=>openClient(b.dataset.bid));
+}
+bind.bidones=()=>{
+  fillBidones();
+  $('#bdu').onchange=e=>{BIDF.u=e.target.value;fillBidones()};
+  $('#bdord').onchange=e=>{BIDF.desc=e.target.value==='desc';fillBidones()};
+  $('#bdcsv').onclick=bidonesCsv;
+};
+function bidonesCsv(){
+  const list=bidonesRows();
+  if(!list.length)return alert('No hay clientes con bidones para los filtros elegidos.');
+  const h=['cliente','vendedor','bidones','detalle'];
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=list.map(c=>{
+    const b=balances(c.id);
+    const detalle=Object.entries(b).sort(balSort).map(([l,n])=>`${l} L:${n}`).join('; ');
+    return [c.name,nameOf(c.created_by),balText(b),detalle].map(q).join(',');
+  });
+  dl('bidones-'+isoDay(Date.now())+'.csv','\ufeff'+[h.join(','),...rows].join('\n'),'text/csv');
 }
 function waHref(phone){
   const d=String(phone||'').replace(/\D/g,'');
@@ -502,9 +618,12 @@ async function openClient(id){
   const d=$('#dlg');
   d.innerHTML='<p class="mu">Cargando historial…</p>';if(!d.open)d.showModal();
   try{
-    const [sales,pays]=await Promise.all([
+    const [sales,pays,moves]=await Promise.all([
       paged(()=>sb.from('sales').select('*').eq('client_id',id)),
-      paged(()=>sb.from('payments').select('*').eq('client_id',id))]);
+      paged(()=>sb.from('payments').select('*').eq('client_id',id)),
+      // Si hay movimientos nuevos del teléfono, refresco también el cache del panel.
+      paged(()=>sb.from('container_movements').select('*').eq('client_id',id)).catch(()=>null)]);
+    if(moves)S.containers=[...S.containers.filter(m=>m.client_id!==id),...moves];
     sales.sort((a,b)=>b.created_at-a.created_at);
     pays.sort((a,b)=>b.created_at-a.created_at);
     const valid=sales.filter(s=>!s.is_voided);
@@ -518,6 +637,15 @@ async function openClient(id){
       return `<tr><td>${fdt(s.created_at)}</td><td class="hide-sm">${PAY[s.payment_type]||s.payment_type}</td><td class="r">${money(s.total_cents)}</td><td class="r hide-sm">${money(s.paid_cents)}</td><td>${state}</td></tr>`;
     }).join('');
     const payRows=pays.slice(0,100).map(p=>`<tr><td>${fdt(p.created_at)}</td><td>${PAY[p.method]||p.method}</td><td class="r">${money(p.amount_cents)}</td></tr>`).join('');
+    const bal=balances(id);
+    const cmoves=S.containers.filter(m=>m.client_id===id).sort((a,b)=>(b.created_at||0)-(a.created_at||0));
+    const cRows=cmoves.slice(0,50).map(m=>{
+      const qty=Math.max(Number(m.delivered)||0,Number(m.returned)||0);
+      const sign=m.kind==='CAMBIO'?'':(Number(m.delivered)>0?'+':'−');
+      const cls=m.kind!=='CAMBIO'&&Number(m.returned)>0?'bad':'ok';
+      return `<tr><td>${fdt(m.created_at)}</td><td>${esc(nameOf(m.created_by))}</td><td>${esc(CTYPES[m.kind]||m.kind)}</td><td class="r ${cls}">${sign}${esc(qty)}</td><td class="r">${esc(m.liters)} L</td><td>${esc(m.note)||'—'}</td></tr>`;
+    }).join('');
+    const admin=ME&&ME.role==='ADMIN';
     d.innerHTML=`<h2>${esc(c.name)}</h2>
     <p class="mu" style="margin:0 0 8px">${[c.localidad,c.address].filter(Boolean).map(esc).join(' · ')||'Sin dirección'}</p>
     <div class="row" style="margin:0 0 10px">
@@ -537,7 +665,22 @@ async function openClient(id){
       <div class="card kpi"><small>Fiado generado</small><b>${money(fiado)}</b></div>
       <div class="card kpi"><small>Cobrado</small><b>${money(cobrado)}</b></div>
     </div>
-    <details open style="margin-top:6px"><summary>Ventas (${sales.length})</summary>
+    <details open style="margin-top:6px"><summary><b>Bidones</b> <span class="mu">· ${esc(balText(bal))}</span></summary>
+      <p style="margin:0 0 6px">Saldo: <b>${balHtml(bal)}</b></p>
+      ${Object.values(bal).some(n=>n<0)?'<p class="bad" style="margin:0 0 6px;font-size:13px">Hay más devoluciones que entregas en algún tamaño. Revisalo.</p>':''}
+      <div class="tw"><table><thead><tr><th>Fecha</th><th>Vendedor</th><th>Tipo</th><th class="r">Cant.</th><th class="r">Litros</th><th>Nota</th></tr></thead><tbody>${cRows||'<tr><td colspan="6" class="mu">Sin movimientos de bidones.</td></tr>'}</tbody></table></div>
+      ${cmoves.length>50?`<p class="mu" style="font-size:12px">Mostrando los últimos 50 de ${cmoves.length} movimientos.</p>`:''}
+      ${admin?`<details style="margin-top:10px"><summary>Ajuste del administrador</summary>
+        <p class="mu" style="font-size:13px;margin:6px 0">Los movimientos no se editan ni se borran: los errores se corrigen con un ajuste.</p>
+        <label>Litros</label><input id="ba_l" type="number" min="1" max="200" step="1" value="20">
+        <label>Operación</label><select id="ba_t"><option value="suma">Suma al saldo</option><option value="resta">Resta del saldo</option></select>
+        <label>Cantidad de bidones</label><input id="ba_q" type="number" min="1" max="99" step="1" value="1">
+        <label>Nota (obligatoria)</label><textarea id="ba_n" rows="2" placeholder="Motivo del ajuste"></textarea>
+        <p id="baerr" class="bad hide" style="font-size:13px"></p>
+        <div class="row" style="margin:8px 0 0;justify-content:flex-end"><button class="pri sm" id="ba_sv">Guardar ajuste</button></div>
+      </details>`:''}
+    </details>
+    <details style="margin-top:6px"><summary>Ventas (${sales.length})</summary>
       <div class="tw"><table><thead><tr><th>Fecha</th><th class="hide-sm">Medio</th><th class="r">Total</th><th class="r hide-sm">Pagado</th><th>Estado</th></tr></thead><tbody>${saleRows||'<tr><td colspan="5" class="mu">Sin ventas.</td></tr>'}</tbody></table></div>
       ${sales.length>100?`<p class="mu" style="font-size:12px">Mostrando las últimas 100 de ${sales.length}.</p>`:''}
     </details>
@@ -553,10 +696,33 @@ async function openClient(id){
     $('#x').onclick=()=>d.close();
     if($('#trf'))$('#trf').onclick=()=>openTransfer(c.id);
     $('#ced').onclick=()=>openClientForm(c.id);
+    if(admin&&$('#ba_sv'))$('#ba_sv').onclick=async()=>{
+      const err=$('#baerr'),fail=m=>{err.textContent=m;err.classList.remove('hide')};
+      err.classList.add('hide');
+      const l=Number($('#ba_l').value),q=Number($('#ba_q').value),note=$('#ba_n').value.trim(),suma=$('#ba_t').value==='suma';
+      if(!Number.isInteger(l)||l<1||l>200)return fail('Ingresá litros entre 1 y 200.');
+      if(!Number.isInteger(q)||q<1||q>99)return fail('Ingresá una cantidad entre 1 y 99.');
+      if(!note)return fail('La nota es obligatoria.');
+      const btn=$('#ba_sv');btn.disabled=true;btn.textContent='Guardando…';
+      const row={client_id:id,liters:l,delivered:suma?q:0,returned:suma?0:q,kind:'AJUSTE',note,
+        created_by:ME.id,created_at:Date.now()};
+      try{
+        ok(await sb.from('container_movements').insert(row));
+        let fresh=null;
+        try{fresh=await paged(()=>sb.from('container_movements').select('*'))}catch(e){}
+        S.containers=fresh||[...S.containers.filter(m=>m.id!==row.id),row];
+        await openClient(id);
+        render();
+      }catch(e){
+        btn.disabled=false;btn.textContent='Guardar ajuste';
+        const msg='No se pudo guardar: '+((e&&e.message)||e);
+        if(document.contains(err))fail(msg);else alert(msg);
+      }
+    };
   }catch(e){d.close()}
 }
 
-/* ---- Clientes controlados por el administrador (v1.16) ---- */
+/* ---- Clientes controlados por el administrador ---- */
 const DAYS=[['Lun',1],['Mar',2],['Mié',4],['Jue',8],['Vie',16],['Sáb',32],['Dom',64]];
 const centsOf=v=>{let t=String(v||'').trim().replace(/\s/g,'');if(!t)return 0;
   t=t.includes(',')?t.replace(/\./g,'').replace(',','.'):t;
@@ -648,7 +814,7 @@ function bindReqs(){
       S.clients=await paged(()=>sb.from('clients').select('*'))}finally{render()}};
 }
 
-/* ---- Importación de clientes por CSV (v1.17) ---- */
+/* ---- Importación de clientes por CSV ---- */
 function parseCsv(text){
   text=text.replace(/^\ufeff/,'');
   const first=text.split(/\r?\n/)[0]||'';
